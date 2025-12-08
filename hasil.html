@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hasil Log Pengunjung</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        /* --- TEMA WARNA CUSTOM (Gradasi Hijau-Biru) --- */
+        :root {
+            --color-gradient-start: #00b894; 
+            --color-gradient-end: #1e90ff; 
+            --color-primary-light: #e0f7fa; 
+            --color-primary-medium: #00a8a8; 
+            --color-selected-row: #f0f9ff; /* blue-50 */
+        }
+
+        .bg-primary-gradient { 
+            background-image: linear-gradient(to right, var(--color-gradient-start), var(--color-gradient-end));
+            color: white; 
+        }
+        .text-primary-gradient { 
+            background-image: linear-gradient(to right, var(--color-gradient-start), var(--color-gradient-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Styling untuk Header Tabel */
+        .log-table th {
+            padding: 12px 16px;
+            background-color: var(--color-primary-medium);
+            color: white;
+            text-align: left;
+            font-size: 0.875rem; /* text-sm */
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Styling untuk Baris Tabel */
+        .log-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #e5e7eb; /* gray-200 */
+            font-size: 0.875rem; 
+            white-space: nowrap; 
+        }
+        
+        .log-table tbody tr:hover:not(.selected-row) {
+            background-color: #f3f4f6; /* gray-100 */
+            cursor: pointer;
+        }
+
+        /* Gaya Baris Terpilih */
+        .selected-row {
+            background-color: var(--color-selected-row) !important;
+            border-left: 4px solid var(--color-gradient-end);
+        }
+
+        /* Kolom Checkbox lebih sempit */
+        .selection-cell {
+            width: 1%; 
+            padding-left: 10px !important;
+            padding-right: 10px !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4 sm:p-8">
+
+    <div class="max-w-7xl mx-auto mb-20"> <h1 class="text-3xl font-bold text-center mb-6">
+            <span class="text-primary-gradient">Hasil Log Pengunjung</span>
+        </h1>
+
+        <div id="messageBox" class="p-3 mb-6 hidden rounded-lg text-sm" role="alert"></div>
+        
+        <div class="mb-6 space-y-4 sm:space-y-0 sm:flex sm:space-x-4 sm:justify-end">
+            
+            <input type="text" id="filterInput" placeholder="Cari Nama/Judul/NIS..."
+                   class="w-full sm:flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-medium focus:border-primary-medium">
+            
+            <button id="copyTableButton" class="w-full sm:w-auto p-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-semibold shadow-md transition duration-150">
+                Salin Tabel
+            </button>
+        </div>
+
+        <div class="overflow-x-auto bg-white rounded-lg shadow-xl border border-gray-200">
+            <table id="logsTable" class="min-w-full log-table border-collapse">
+                <thead>
+                    <tr>
+                        <th class="rounded-tl-lg selection-cell">
+                            <input type="checkbox" id="selectAllCheckbox" title="Pilih Semua" class="rounded text-blue-500 border-gray-300 focus:ring-blue-500">
+                        </th>
+                        <th>Tanggal</th>
+                        <th>Nama</th>
+                        <th>Blok</th>
+                        <th>Jenjang</th>
+                        <th>Judul</th>
+                        <th>Kategori</th>
+                        <th class="rounded-tr-lg">Keterangan</th>
+                    </tr>
+                </thead>
+                <tbody id="logsContainer">
+                    </tbody>
+            </table>
+        </div>
+
+        <p id="loadingMessage" class="text-center text-gray-500 pt-8 hidden">Memuat data...</p>
+        <p id="totalCount" class="text-center text-sm text-gray-600 mt-4"></p>
+
+    </div>
+
+    <div id="multiSelectControls" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-2xl p-4 transition-transform duration-300 transform translate-y-full hidden">
+        <div class="max-w-7xl mx-auto flex justify-between items-center space-x-4">
+            <p id="selectCountDisplay" class="text-gray-700 font-semibold"></p>
+            <div class="flex space-x-3">
+                <button id="cancelSelectionButton" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition duration-150">
+                    Batal
+                </button>
+                <button id="selectAllVisibleButton" class="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-100 rounded-lg hover:bg-blue-200 transition duration-150">
+                    Pilih Semua
+                </button>
+                <button id="deleteSelectedButton" class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 transition duration-150">
+                    Hapus Data
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =================================================================
+        // 1. FIREBASE CONFIGURATION & COLLECTIONS
+        // =================================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
+            authDomain: "databuku-6385c.firebaseapp.com",
+            databaseURL: "https://databuku-6385c-default-rtdb.firebaseio.com",
+            projectId: "databuku-6385c",
+            storageBucket: "databuku-6385c.firebasestorage.app",
+            messagingSenderId: "844439345466",
+            appId: "1:844439345466:web:fb90dfc8337a96f0621803"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+        
+        const FIRESTORE_COLLECTION_LOG = "log_pengunjung"; 
+        
+        // Data Global dan Seleksi
+        let globalLogData = []; 
+        let filteredLogIds = []; // ID log yang saat ini ditampilkan setelah filter
+        let selectedLogIds = new Set(); // Set untuk menyimpan ID yang dipilih
+
+        // DOM Elements
+        const messageBox = document.getElementById('messageBox');
+        const logsContainer = document.getElementById('logsContainer');
+        const filterInput = document.getElementById('filterInput');
+        const totalCountElement = document.getElementById('totalCount');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const logsTable = document.getElementById('logsTable');
+        
+        // Multi-Select DOM Elements
+        const multiSelectControls = document.getElementById('multiSelectControls');
+        const selectCountDisplay = document.getElementById('selectCountDisplay');
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        const selectAllVisibleButton = document.getElementById('selectAllVisibleButton');
+        const cancelSelectionButton = document.getElementById('cancelSelectionButton');
+        const deleteSelectedButton = document.getElementById('deleteSelectedButton');
+        
+        function showMessage(message, isError) {
+            messageBox.textContent = message;
+            messageBox.className = `p-3 mb-6 rounded-lg text-sm ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`;
+            messageBox.style.display = 'block';
+            setTimeout(() => { messageBox.style.display = 'none'; }, 5000); 
+        }
+
+        // =================================================================
+        // 2. DATA LISTENER (REAL-TIME)
+        // =================================================================
+
+        function initializeLogListener() {
+            loadingMessage.style.display = 'block';
+            logsTable.style.display = 'none';
+
+            db.collection(FIRESTORE_COLLECTION_LOG)
+                .onSnapshot(snapshot => {
+                    globalLogData = [];
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        
+                        data._searchableText = `${(data.nama || '').toLowerCase()} ${(data.nis || '').toLowerCase()} ${(data.judul || '').toLowerCase()} ${(data.kamar || '').toLowerCase()} ${(data.keterangan || '').toLowerCase()}`;
+                        data._id = doc.id; 
+                        
+                        // Konversi timestamp
+                        if (data.timestamp && data.timestamp.toDate) {
+                            data.date = data.timestamp.toDate();
+                            data.formattedDate = data.date.toLocaleString('id-ID', {
+                                year: 'numeric', month: 'short', day: 'numeric',
+                                hour: '2-digit', minute: '2-digit'
+                            });
+                        } else {
+                            data.date = new Date(0); 
+                            data.formattedDate = '-';
+                        }
+                        
+                        globalLogData.push(data);
+                    });
+                    
+                    loadingMessage.style.display = 'none';
+                    logsTable.style.display = 'table';
+                    showMessage(`✅ Log berhasil dimuat. Total ${globalLogData.length} entri.`, false);
+                    handleSearchChange(); 
+                    // Penting: Reset seleksi setelah data dimuat/diubah, karena ID mungkin telah dihapus.
+                    clearSelection();
+                }, error => {
+                    console.error("Error mendengarkan Log Pengunjung:", error);
+                    loadingMessage.textContent = "Gagal memuat data log.";
+                    loadingMessage.style.display = 'block';
+                    logsTable.style.display = 'none';
+                    showMessage(`❌ Gagal koneksi Log Pengunjung: ${error.message}`, true);
+                });
+        }
+
+        // =================================================================
+        // 3. FILTERING & SORTING LOGIC
+        // =================================================================
+
+        function handleSearchChange() {
+            const searchText = filterInput.value.toLowerCase();
+
+            let filteredData = globalLogData;
+
+            // 1. Filtering
+            if (searchText) {
+                filteredData = globalLogData.filter(log => log._searchableText.includes(searchText));
+            }
+
+            // 2. Sorting (Default: Terbaru berdasarkan timestamp_desc)
+            filteredData.sort((a, b) => {
+                return b.date - a.date;
+            });
+            
+            // Perbarui ID yang terfilter
+            filteredLogIds = filteredData.map(log => log._id);
+
+            renderLogs(filteredData);
+            updateMultiSelectUI(); // Perbarui UI setelah filter
+        }
+
+        // =================================================================
+        // 4. RENDERING LOGS (TABLE LAYOUT)
+        // =================================================================
+
+        function renderLogs(logs) {
+            logsContainer.innerHTML = '';
+            
+            const COLUMN_COUNT = 8; // 7 Kolom Data + 1 Kolom Checkbox
+
+            if (logs.length === 0) {
+                logsContainer.innerHTML = `<tr><td colspan="${COLUMN_COUNT}" class="text-center text-gray-500 py-8">Tidak ada data log yang sesuai dengan kriteria.</td></tr>`;
+                totalCountElement.textContent = `Total hasil: 0`;
+                return;
+            }
+
+            logs.forEach(log => {
+                const isSelected = selectedLogIds.has(log._id);
+                
+                const row = document.createElement('tr');
+                row.className = isSelected ? 'selected-row' : '';
+                row.dataset.logId = log._id; // Simpan ID di baris
+
+                // Klik Baris untuk memilih
+                row.addEventListener('click', () => toggleRowSelection(row, log._id));
+
+                // URUTAN: Checkbox, Tanggal, Nama, Blok (Kamar), Jenjang, Judul, Kategori, Keterangan
+                row.innerHTML = `
+                    <td class="selection-cell">
+                        <input type="checkbox" data-log-id="${log._id}" ${isSelected ? 'checked' : ''} 
+                            class="log-checkbox rounded text-blue-500 border-gray-300 focus:ring-blue-500"
+                            onclick="event.stopPropagation()">
+                    </td>
+                    <td>${log.formattedDate}</td>
+                    <td>${log.nama || '-'}</td>
+                    <td>${log.kamar || '-'}</td>
+                    <td>${log.jenjang || '-'}</td>
+                    <td>${log.judul || '-'}</td>
+                    <td>${log.kategori || '-'}</td>
+                    <td><span class="font-semibold">${log.keterangan || '-'}</span></td>
+                `;
+                
+                // Tambahkan event listener pada checkbox
+                const checkbox = row.querySelector('.log-checkbox');
+                checkbox.addEventListener('change', (e) => {
+                    if (e.target.checked) {
+                        selectedLogIds.add(log._id);
+                    } else {
+                        selectedLogIds.delete(log._id);
+                    }
+                    row.classList.toggle('selected-row', e.target.checked);
+                    updateMultiSelectUI();
+                });
+                
+                logsContainer.appendChild(row);
+            });
+
+            totalCountElement.textContent = `Total hasil: ${logs.length} entri`;
+            updateSelectAllCheckboxState();
+        }
+        
+        // =================================================================
+        // 5. MULTI-SELECT FUNCTIONS
+        // =================================================================
+
+        function toggleRowSelection(row, logId) {
+            const checkbox = row.querySelector('.log-checkbox');
+            const isSelected = selectedLogIds.has(logId);
+            
+            if (isSelected) {
+                selectedLogIds.delete(logId);
+                row.classList.remove('selected-row');
+                checkbox.checked = false;
+            } else {
+                selectedLogIds.add(logId);
+                row.classList.add('selected-row');
+                checkbox.checked = true;
+            }
+            updateMultiSelectUI();
+        }
+
+        function clearSelection() {
+            selectedLogIds.clear();
+            document.querySelectorAll('.log-table .selected-row').forEach(row => {
+                row.classList.remove('selected-row');
+                const checkbox = row.querySelector('.log-checkbox');
+                if (checkbox) checkbox.checked = false;
+            });
+            updateMultiSelectUI();
+        }
+
+        function selectAllVisible() {
+            const allSelected = filteredLogIds.every(id => selectedLogIds.has(id));
+            
+            if (allSelected && filteredLogIds.length > 0) {
+                // Jika semua sudah terpilih, batalkan seleksi
+                filteredLogIds.forEach(id => selectedLogIds.delete(id));
+            } else {
+                // Pilih semua yang terlihat/terfilter
+                filteredLogIds.forEach(id => selectedLogIds.add(id));
+            }
+
+            // Perbarui UI baris dan checkbox
+            document.querySelectorAll('.log-table tbody tr').forEach(row => {
+                const logId = row.dataset.logId;
+                const checkbox = row.querySelector('.log-checkbox');
+                if (selectedLogIds.has(logId)) {
+                    row.classList.add('selected-row');
+                    if (checkbox) checkbox.checked = true;
+                } else {
+                    row.classList.remove('selected-row');
+                    if (checkbox) checkbox.checked = false;
+                }
+            });
+
+            updateMultiSelectUI();
+        }
+
+        function updateMultiSelectUI() {
+            const count = selectedLogIds.size;
+            selectCountDisplay.textContent = `${count} data terpilih`;
+
+            if (count > 0) {
+                multiSelectControls.style.display = 'block';
+                setTimeout(() => multiSelectControls.classList.remove('translate-y-full'), 10);
+            } else {
+                multiSelectControls.classList.add('translate-y-full');
+                setTimeout(() => multiSelectControls.style.display = 'none', 300);
+            }
+            updateSelectAllCheckboxState();
+        }
+
+        function updateSelectAllCheckboxState() {
+            const visibleLogCount = filteredLogIds.length;
+            const selectedVisibleCount = filteredLogIds.filter(id => selectedLogIds.has(id)).length;
+
+            if (visibleLogCount === 0) {
+                 selectAllCheckbox.checked = false;
+                 selectAllCheckbox.indeterminate = false;
+            } else if (selectedVisibleCount === visibleLogCount) {
+                selectAllCheckbox.checked = true;
+                selectAllCheckbox.indeterminate = false;
+            } else if (selectedVisibleCount > 0) {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = true;
+            } else {
+                selectAllCheckbox.checked = false;
+                selectAllCheckbox.indeterminate = false;
+            }
+        }
+        
+        // =================================================================
+        // 6. ACTION FUNCTIONS
+        // =================================================================
+
+        function deleteSelectedLogs() {
+            const count = selectedLogIds.size;
+            if (count === 0) {
+                showMessage('Pilih minimal satu data untuk dihapus.', true);
+                return;
+            }
+
+            if (!confirm(`Yakin ingin menghapus ${count} data log yang terpilih? Aksi ini tidak dapat dibatalkan.`)) {
+                return;
+            }
+
+            const deletePromises = Array.from(selectedLogIds).map(id => {
+                return db.collection(FIRESTORE_COLLECTION_LOG).doc(id).delete();
+            });
+
+            Promise.all(deletePromises)
+                .then(() => {
+                    showMessage(`✅ Berhasil menghapus ${count} data log.`, false);
+                    clearSelection(); // Otomatis dipanggil, tapi memastikan UI bersih
+                })
+                .catch(error => {
+                    console.error("Error menghapus log:", error);
+                    showMessage(`❌ Gagal menghapus data log: ${error.message}`, true);
+                });
+        }
+        
+        function copyTableContent() {
+            const table = document.getElementById('logsTable');
+            let textToCopy = [];
+            
+            // 1. Dapatkan Baris Header (Skip Checkbox header)
+            const headers = Array.from(table.tHead.rows[0].cells).slice(1).map(th => th.textContent.trim());
+            textToCopy.push(headers.join('\t')); 
+
+            // 2. Dapatkan Baris Data yang ditampilkan (Skip Checkbox cell)
+            const rows = table.tBodies[0].rows;
+            if (rows.length === 0 || rows[0].cells.length < 8) { 
+                showMessage('Tidak ada data di tabel untuk disalin.', true);
+                return;
+            }
+
+            Array.from(rows).forEach(row => {
+                // Ambil data, mulai dari indeks 1 (mengabaikan checkbox)
+                const rowData = Array.from(row.cells).slice(1).map(td => td.textContent.trim());
+                textToCopy.push(rowData.join('\t'));
+            });
+
+            // 3. Salin ke Clipboard
+            const fullText = textToCopy.join('\n');
+            
+            navigator.clipboard.writeText(fullText).then(() => {
+                showMessage('✅ Isi tabel berhasil disalin ke clipboard!', false);
+            }).catch(err => {
+                console.error('Gagal menyalin teks: ', err);
+                showMessage('❌ Gagal menyalin isi tabel. Pastikan browser Anda mengizinkan akses clipboard.', true);
+            });
+        }
+
+
+        // =================================================================
+        // 7. INISIALISASI
+        // =================================================================
+        window.onload = function() {
+            initializeLogListener(); 
+            
+            // Event listeners
+            filterInput.addEventListener('input', handleSearchChange);
+            document.getElementById('copyTableButton').addEventListener('click', copyTableContent);
+            
+            // Multi-select listeners
+            selectAllCheckbox.addEventListener('change', selectAllVisible);
+            selectAllVisibleButton.addEventListener('click', selectAllVisible);
+            cancelSelectionButton.addEventListener('click', clearSelection);
+            deleteSelectedButton.addEventListener('click', deleteSelectedLogs);
+        };
+    </script>
+</body>
+</html>

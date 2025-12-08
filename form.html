@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Form Pengunjung Perpustakaan Lubangsa</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        /* --- TEMA WARNA CUSTOM (Gradasi Hijau-Biru) --- */
+        :root {
+            --color-gradient-start: #00b894; 
+            --color-gradient-end: #1e90ff; 
+            --color-primary-light: #e0f7fa; 
+            --color-primary-text: #0e7490; 
+            --color-primary-medium: #00a8a8; 
+        }
+
+        .bg-primary-gradient { 
+            background-image: linear-gradient(to right, var(--color-gradient-start), var(--color-gradient-end));
+            color: white; 
+        }
+        .text-primary-gradient { 
+            background-image: linear-gradient(to right, var(--color-gradient-start), var(--color-gradient-end));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Styling Tambahan untuk Autocomplete */
+        .autocomplete-container {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .autocomplete-items {
+            position: absolute;
+            border: 1px solid #d4d4d4;
+            border-bottom: none;
+            border-top: none;
+            z-index: 99;
+            top: calc(100% - 1px); 
+            left: 0;
+            right: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 0 0 8px 8px;
+        }
+
+        .autocomplete-items div {
+            padding: 10px;
+            cursor: pointer;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .autocomplete-items div:hover {
+            background-color: var(--color-primary-light);
+        }
+
+        .autocomplete-active {
+            background-color: var(--color-primary-medium) !important;
+            color: white;
+        }
+        
+        /* Gaya untuk teks kecil di autocomplete */
+        .autocomplete-items .text-xs {
+            font-size: 0.75rem; 
+            color: #6b7280; /* gray-500 */
+        }
+        .autocomplete-active .text-xs {
+             color: #e5e7eb; /* white-300 for active state contrast */
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4 sm:p-8">
+
+    <div class="max-w-xl mx-auto sm:shadow-xl sm:bg-white p-4 sm:p-8 sm:rounded-xl sm:border sm:border-gray-200">
+        
+        <h1 class="text-3xl font-bold text-center mb-6">
+            <span class="text-primary-gradient">Form Pengunjung</span>
+        </h1>
+
+        <div id="messageBox" class="p-3 mb-6 hidden rounded-lg text-sm" role="alert"></div>
+
+        <form id="pengunjungForm" class="space-y-6">
+            
+            <div>
+                <label for="namaSantri" class="block text-sm font-medium text-gray-700 mb-1">Nama Santri (atau NIS):</label>
+                <div class="autocomplete-container">
+                    <input type="text" id="namaSantri" name="namaSantri" required
+                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-medium focus:border-primary-medium"
+                           placeholder="Ketik nama atau NIS santri...">
+                    <input type="hidden" id="nisSantri" name="nisSantri">
+                    <div id="namaSantri-autocomplete-list" class="autocomplete-items"></div>
+                </div>
+            </div>
+
+            <div>
+                <label for="kamarSantriInput" class="block text-sm font-medium text-gray-700 mb-1">Kamar Santri:</label>
+                <input type="text" id="kamarSantriInput" name="kamarSantriInput"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-medium focus:border-primary-medium"
+                       placeholder="Otomatis terisi saat memilih nama santri...">
+            </div>
+
+            <div>
+                <label for="jenjangSelect" class="block text-sm font-medium text-gray-700 mb-1">Jenjang Pendidikan:</label>
+                <select id="jenjangSelect" name="jenjangSelect" required
+                        class="w-full p-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-medium focus:border-primary-medium">
+                    <option value="" disabled selected>Pilih Jenjang...</option>
+                    <option value="SLTP">SLTP (MTS Sederajat)</option>
+                    <option value="SLTA">SLTA (MA Sederajat)</option>
+                    <option value="PT">PT (Perguruan Tinggi)</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="judulBuku" class="block text-sm font-medium text-gray-700 mb-1">Judul Buku yang Dibaca/Dipinjam:</label>
+                <div class="autocomplete-container">
+                    <input type="text" id="judulBuku" name="judulBuku" required
+                           class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-medium focus:border-primary-medium"
+                           placeholder="Ketik judul buku...">
+                    <input type="hidden" id="biblioIdBuku" name="biblioIdBuku">
+                    <div id="judulBuku-autocomplete-list" class="autocomplete-items"></div>
+                </div>
+            </div>
+
+            <div class="flex space-x-4">
+                <div class="flex-1">
+                    <label for="kategoriSelect" class="block text-sm font-medium text-gray-700 mb-1">Kategori Buku:</label>
+                    <select id="kategoriSelect" name="kategoriSelect" required
+                            class="w-full p-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-medium focus:border-primary-medium">
+                        <option value="" disabled selected>Pilih Kategori...</option>
+                        <option value="Kesusastraan">Kesusastraan</option>
+                        <option value="Komik">Komik</option>
+                        <option value="Agama">Agama</option>
+                        <option value="Sejarah dan Geografi">Sejarah dan Geografi</option>
+                        <option value="Filsafat dan Psikologi">Filsafat dan Psikologi</option>
+                        <option value="Ilmu Sosial">Ilmu Sosial</option>
+                        <option value="Ilmu Bahasa">Ilmu Bahasa</option>
+                        <option value="Karya Umum">Karya Umum</option>
+                        <option value="Ilmu Murni">Ilmu Murni</option>
+                        <option value="Majalah">Majalah</option>
+                        <option value="Managemen">Managemen</option>
+                        <option value="Berita">Berita</option>
+                        <option value="Kesenian">Kesenian</option>
+                    </select>
+                </div>
+                <div class="flex-1">
+                    <label for="keteranganSelect" class="block text-sm font-medium text-gray-700 mb-1">Keterangan (Baca/Pinjam):</label>
+                    <select id="keteranganSelect" name="keteranganSelect" required
+                            class="w-full p-3 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-medium focus:border-primary-medium">
+                        <option value="" disabled selected>Pilih Keterangan...</option>
+                        <option value="Baca">Baca</option>
+                        <option value="Pinjam">Pinjam</option>
+                    </select>
+                </div>
+            </div>
+
+            <button type="submit" id="submitButton"
+                    class="w-full p-3 rounded-lg bg-primary-gradient hover:opacity-90 transition duration-150 font-semibold shadow-md">
+                Catat Kunjungan
+            </button>
+        </form>
+
+    </div>
+
+    <script>
+        // =================================================================
+        // 1. FIREBASE CONFIGURATION & COLLECTIONS
+        // =================================================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
+            authDomain: "databuku-6385c.firebaseapp.com",
+            databaseURL: "https://databuku-6385c-default-rtdb.firebaseio.com",
+            projectId: "databuku-6385c",
+            storageBucket: "databuku-6385c.firebasestorage.app",
+            messagingSenderId: "844439345466",
+            appId: "1:844439345466:web:fb90dfc8337a96f0621803"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        const db = firebase.firestore();
+        
+        // Konstanta Koleksi
+        const FIRESTORE_COLLECTION_ANGGOTA = "keanggotaan_v2"; // Dokumen Santri (NIS)
+        const FIRESTORE_COLLECTION_BIBLIO = "biblio"; // Dokumen Buku (Biblio ID)
+        const FIRESTORE_COLLECTION_LOG = "log_pengunjung"; 
+        
+        // Data Global untuk Autocomplete
+        let globalAnggotaData = []; 
+        let globalBiblioData = [];  
+        
+        const messageBox = document.getElementById('messageBox');
+        
+        function showMessage(message, isError) {
+            messageBox.textContent = message;
+            messageBox.className = `p-3 mb-6 rounded-lg text-sm ${isError ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`;
+            messageBox.style.display = 'block';
+            setTimeout(() => { messageBox.style.display = 'none'; }, 5000); 
+        }
+
+        // =================================================================
+        // 2. DATA LOADERS (MENGISI DATA GLOBAL)
+        // =================================================================
+
+        function loadAnggotaData() {
+            return db.collection(FIRESTORE_COLLECTION_ANGGOTA).get().then(snapshot => {
+                globalAnggotaData = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    globalAnggotaData.push({
+                        id: doc.id, // ID Dokumen Firestore = NIS
+                        nama: data.keanggotaan || 'Nama Tidak Diketahui',
+                        kamar: data.kamarSantri || '-', // Memuat data kamar
+                        lastJenjang: data.lastJenjang || '', // Memuat Jenjang terakhir dari dokumen Santri
+                        search: `${(data.keanggotaan || '').toLowerCase()} ${(doc.id || '').toLowerCase()}` // Mencari di Nama dan NIS
+                    });
+                });
+                console.log(`✅ ${globalAnggotaData.length} Data Anggota termuat.`);
+            }).catch(error => {
+                console.error("Error memuat data anggota:", error);
+                showMessage(`❌ Gagal memuat data anggota: ${error.message}`, true);
+            });
+        }
+
+        function loadBiblioData() {
+            return db.collection(FIRESTORE_COLLECTION_BIBLIO).get().then(snapshot => {
+                globalBiblioData = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    globalBiblioData.push({
+                        id: doc.id, // ID Dokumen Firestore = biblioId
+                        judul: data.judul || 'Judul Tidak Diketahui',
+                        lastKategori: data.lastKategori || '', // Memuat Kategori terakhir dari dokumen Buku
+                        search: (data.judul || '').toLowerCase()
+                    });
+                });
+                console.log(`✅ ${globalBiblioData.length} Data Bibliografi termuat.`);
+            }).catch(error => {
+                console.error("Error memuat data bibliografi:", error);
+                showMessage(`❌ Gagal memuat data buku: ${error.message}`, true);
+            });
+        }
+
+        // =================================================================
+        // 3. FUNGSI ACJ (AUTOCOMPLETE JAVASCRIPT)
+        // =================================================================
+
+        function autocomplete(inputElement, dataArray, hiddenIdElement, displayField) {
+            let currentFocus;
+            const autocompleteList = document.getElementById(inputElement.id + "-autocomplete-list");
+            const isSantriAutocomplete = inputElement.id === 'namaSantri'; 
+
+            inputElement.addEventListener("input", function(e) {
+                let val = this.value.toLowerCase();
+                closeAllLists();
+                if (!val) { return false; }
+                currentFocus = -1;
+
+                // Kosongkan nilai ID tersembunyi jika input diubah
+                hiddenIdElement.value = '';
+                
+                // Reset bidang terkait jika input diubah
+                if (isSantriAutocomplete) {
+                    document.getElementById('kamarSantriInput').value = '';
+                    document.getElementById('jenjangSelect').value = '';
+                } else {
+                    document.getElementById('kategoriSelect').value = '';
+                }
+
+                autocompleteList.innerHTML = '';
+
+                let count = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    const searchKey = dataArray[i].search || dataArray[i][displayField].toLowerCase();
+                    
+                    if (searchKey.indexOf(val) > -1 && count < 10) { 
+                        const itemDiv = document.createElement("DIV");
+                        let htmlToDisplay = '';
+                        
+                        if (isSantriAutocomplete) {
+                            // LOGIKA TAMPILAN SANTRI (Nama, NIS & Kamar di bawah)
+                            const nama = dataArray[i].nama || '';
+                            const id = dataArray[i].id || ''; // NIS
+                            const kamar = dataArray[i].kamar || '-';
+
+                            const detailText = `NIS: ${id} | Kamar: ${kamar}`;
+                            let nameHtml = nama;
+                            let detailHtml = detailText;
+                            
+                            // Bolding logic simplified
+                            if (nama.toLowerCase().includes(val)) {
+                                const matchIndex = nama.toLowerCase().indexOf(val);
+                                nameHtml = nama.substring(0, matchIndex) + 
+                                           "<strong>" + nama.substring(matchIndex, matchIndex + val.length) + "</strong>" + 
+                                           nama.substring(matchIndex + val.length);
+                            } else if (detailText.toLowerCase().includes(val)) {
+                                const matchIndex = detailText.toLowerCase().indexOf(val);
+                                detailHtml = detailText.substring(0, matchIndex) + 
+                                             "<strong>" + detailText.substring(matchIndex, matchIndex + val.length) + "</strong>" + 
+                                             detailText.substring(matchIndex + val.length);
+                            }
+
+                            htmlToDisplay = `${nameHtml}<br><span class="text-xs text-gray-500">${detailHtml}</span>`;
+
+                        } else { 
+                            // LOGIKA TAMPILAN BUKU (Single line display)
+                            let displayValue = dataArray[i][displayField]; 
+                            let matchIndex = displayValue.toLowerCase().indexOf(val);
+                            
+                            // Bolding logic for book titles
+                            if (matchIndex > -1) {
+                                htmlToDisplay = displayValue.substring(0, matchIndex);
+                                htmlToDisplay += "<strong>" + displayValue.substring(matchIndex, matchIndex + val.length) + "</strong>";
+                                htmlToDisplay += displayValue.substring(matchIndex + val.length);
+                            } else {
+                                htmlToDisplay = displayValue; 
+                            }
+                        }
+
+                        itemDiv.innerHTML = htmlToDisplay;
+                        itemDiv.innerHTML += "<input type='hidden' value='" + dataArray[i][displayField] + "'>";
+                        itemDiv.dataset.id = dataArray[i].id; 
+                        
+                        if (dataArray[i].kamar) {
+                            itemDiv.dataset.kamar = dataArray[i].kamar; 
+                        }
+                        
+                        // Menyimpan data lastJenjang/lastKategori di itemDiv
+                        if (isSantriAutocomplete) {
+                            itemDiv.dataset.lastJenjang = dataArray[i].lastJenjang || '';
+                        } else {
+                            itemDiv.dataset.lastKategori = dataArray[i].lastKategori || '';
+                        }
+
+
+                        itemDiv.addEventListener("click", function(e) {
+                            inputElement.value = this.getElementsByTagName("input")[0].value;
+                            hiddenIdElement.value = this.dataset.id;
+                            
+                            // LOGIKA PENGISIAN SETELAH DIPILIH
+                            if (inputElement.id === 'namaSantri') {
+                                // 1. Isi Kamar
+                                const kamarInputElement = document.getElementById('kamarSantriInput');
+                                if (kamarInputElement && this.dataset.kamar) {
+                                    kamarInputElement.value = this.dataset.kamar; 
+                                }
+                                
+                                // 2. Isi Jenjang Otomatis dari data global/dataset
+                                if (this.dataset.lastJenjang) {
+                                    document.getElementById('jenjangSelect').value = this.dataset.lastJenjang; 
+                                    showMessage(`✅ Jenjang otomatis terisi: ${this.dataset.lastJenjang}`, false);
+                                } else {
+                                     document.getElementById('jenjangSelect').value = ''; // Pastikan kosong jika tidak ada histori
+                                }
+                                
+                            } else if (inputElement.id === 'judulBuku') {
+                                // 1. Isi Kategori Otomatis dari data global/dataset
+                                if (this.dataset.lastKategori) {
+                                     document.getElementById('kategoriSelect').value = this.dataset.lastKategori;
+                                     showMessage(`✅ Kategori otomatis terisi: ${this.dataset.lastKategori}`, false);
+                                } else {
+                                     document.getElementById('kategoriSelect').value = ''; // Pastikan kosong jika tidak ada histori
+                                }
+                            }
+                            
+                            closeAllLists();
+                        });
+                        
+                        autocompleteList.appendChild(itemDiv);
+                        count++;
+                    }
+                }
+            });
+
+            inputElement.addEventListener("keydown", function(e) {
+                let x = document.getElementById(this.id + "-autocomplete-list");
+                if (x) x = x.getElementsByTagName("div");
+                if (e.keyCode == 40) { // Tombol Bawah
+                    currentFocus++;
+                    addActive(x);
+                } else if (e.keyCode == 38) { // Tombol Atas
+                    currentFocus--;
+                    addActive(x);
+                } else if (e.keyCode == 13) { // Tombol Enter
+                    if (currentFocus > -1) {
+                        e.preventDefault();
+                        if (x) x[currentFocus].click();
+                    }
+                }
+            });
+
+            function addActive(x) {
+                if (!x) return false;
+                removeActive(x);
+                if (currentFocus >= x.length) currentFocus = 0;
+                if (currentFocus < 0) currentFocus = (x.length - 1);
+                x[currentFocus].classList.add("autocomplete-active");
+            }
+
+            function removeActive(x) {
+                for (let i = 0; i < x.length; i++) {
+                    x[i].classList.remove("autocomplete-active");
+                }
+            }
+
+            function closeAllLists(elmnt) {
+                const x = document.getElementsByClassName("autocomplete-items");
+                for (let i = 0; i < x.length; i++) {
+                    if (elmnt != x[i] && elmnt != inputElement) {
+                        x[i].innerHTML = ''; 
+                    }
+                }
+            }
+            document.addEventListener("click", function (e) {
+                closeAllLists(e.target);
+            });
+        }
+
+        // =================================================================
+        // 4. FUNGSI SUBMIT FORM
+        // =================================================================
+        document.getElementById('pengunjungForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const submitButton = document.getElementById('submitButton');
+            submitButton.disabled = true;
+            submitButton.textContent = 'Menyimpan...';
+
+            const namaSantri = document.getElementById('namaSantri').value;
+            const nisSantri = document.getElementById('nisSantri').value; 
+            const kamar = document.getElementById('kamarSantriInput').value; // Ambil nilai kamar saat ini
+            const jenjang = document.getElementById('jenjangSelect').value; 
+            const judulBuku = document.getElementById('judulBuku').value;
+            const biblioIdBuku = document.getElementById('biblioIdBuku').value; 
+            const kategori = document.getElementById('kategoriSelect').value; 
+            const keterangan = document.getElementById('keteranganSelect').value; 
+            
+            // Validasi
+            if (!nisSantri || !biblioIdBuku) {
+                showMessage('❌ Harap pilih Nama Santri dan Judul Buku dari sugesti yang muncul.', true);
+                submitButton.disabled = false;
+                submitButton.textContent = 'Catat Kunjungan';
+                return;
+            }
+            if (!jenjang || !kategori || !keterangan) {
+                 showMessage('❌ Harap lengkapi semua pilihan Jenjang, Kategori, dan Keterangan.', true);
+                 submitButton.disabled = false;
+                 submitButton.textContent = 'Catat Kunjungan';
+                 return;
+            }
+
+            const logData = {
+                nis: nisSantri,
+                nama: namaSantri,
+                kamar: kamar, 
+                jenjang: jenjang,
+                biblioId: biblioIdBuku,
+                judul: judulBuku,
+                kategori: kategori, 
+                keterangan: keterangan, 
+                timestamp: firebase.firestore.FieldValue.serverTimestamp() 
+            };
+
+            db.collection(FIRESTORE_COLLECTION_LOG).add(logData)
+                .then(() => {
+                    showMessage('✅ Kunjungan berhasil dicatat! Waktu dicatat otomatis.', false);
+                    
+                    // ==========================================================
+                    // UPDATE: UPDATE KAMAR SANTRI, JENJANG & KATEGORI TERAKHIR
+                    // ==========================================================
+                    
+                    // 1. Update Jenjang dan Kamar di Keanggotaan (Dokumen Santri)
+                    db.collection(FIRESTORE_COLLECTION_ANGGOTA).doc(nisSantri).update({
+                        lastJenjang: jenjang,
+                        kamarSantri: kamar, 
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }).then(() => {
+                        // Update data global in memory
+                        const santriIndex = globalAnggotaData.findIndex(d => d.id === nisSantri);
+                        if (santriIndex !== -1) {
+                            globalAnggotaData[santriIndex].lastJenjang = jenjang;
+                            globalAnggotaData[santriIndex].kamar = kamar; 
+                        }
+                    }).catch(e => console.error("Gagal update lastJenjang dan kamarSantri:", e));
+
+                    // 2. Update Kategori di Bibliografi (Dokumen Buku)
+                    db.collection(FIRESTORE_COLLECTION_BIBLIO).doc(biblioIdBuku).update({
+                        lastKategori: kategori,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }).then(() => {
+                        // Update data global in memory
+                        const biblioIndex = globalBiblioData.findIndex(d => d.id === biblioIdBuku);
+                        if (biblioIndex !== -1) {
+                            globalBiblioData[biblioIndex].lastKategori = kategori;
+                        }
+                    }).catch(e => console.error("Gagal update lastKategori:", e));
+                    
+                    // Lakukan reset form
+                    document.getElementById('pengunjungForm').reset();
+                    
+                    // Clear data santri/buku yang harus diisi ulang
+                    document.getElementById('nisSantri').value = '';
+                    document.getElementById('biblioIdBuku').value = '';
+                    document.getElementById('kamarSantriInput').value = ''; 
+                })
+                .catch(error => {
+                    console.error("Error menulis log:", error);
+                    showMessage(`❌ Gagal mencatat kunjungan: ${error.message}`, true);
+                })
+                .finally(() => {
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Catat Kunjungan';
+                });
+        });
+
+
+        // =================================================================
+        // 5. INISIALISASI
+        // =================================================================
+        window.onload = function() {
+            // Muat data untuk Autocomplete
+            Promise.all([loadAnggotaData(), loadBiblioData()])
+                .then(() => {
+                    // Inisialisasi Autocomplete
+                    autocomplete(
+                        document.getElementById("namaSantri"), 
+                        globalAnggotaData, 
+                        document.getElementById("nisSantri"), 
+                        "nama"
+                    );
+                    autocomplete(
+                        document.getElementById("judulBuku"), 
+                        globalBiblioData, 
+                        document.getElementById("biblioIdBuku"), 
+                        "judul"
+                    );
+                    
+                    showMessage('Data siap. Jenjang dan Kategori akan terisi otomatis berdasarkan data histori yang tersimpan di dokumen Anggota dan Buku.', false);
+
+                })
+                .catch(() => {
+                     showMessage('Gagal memuat semua data. Cek koneksi Firebase.', true);
+                });
+        };
+    </script>
+</body>
+</html>
