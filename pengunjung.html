@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Halaman dengan Dua Iframe (Garis Kotak Hanya di Form)</title>
+    <style>
+        /* Mengatur tata letak halaman menggunakan Flexbox */
+        body {
+            display: flex;
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+
+        /* Styling dasar untuk semua iframe */
+        iframe {
+            height: 100%;
+            box-sizing: border-box;
+            background-color: white;
+            border: none; /* Hapus border default */
+        }
+
+        /* Iframe untuk Pencarian (Kiri, 70% Lebar) */
+        .iframe-pencarian {
+            flex-grow: 7;
+            width: 70%;
+            /* Opsional: Berikan border minimal di kanan untuk pemisah */
+            border-right: 1px solid #ddd; 
+        }
+
+        /* Iframe untuk Form (Kanan, 30% Lebar) - Garis Luar Kotak Penuh */
+        .iframe-form {
+            flex-grow: 3;
+            width: 30%;
+            
+            /* --- Garis luar berbentuk kotak penuh --- */
+            border: 2px solid #333; /* Border tebal di semua sisi (atas, bawah, kiri, kanan) */
+            padding: 5px; /* Tambahkan padding agar konten tidak menempel ke garis */
+            /* -------------------------------------- */
+        }
+    </style>
+</head>
+<body>
+
+    <iframe class="iframe-pencarian" src="pencarian.html" title="Konten Pencarian"></iframe>
+
+    <iframe class="iframe-form" src="form.html" title="Konten Formulir"></iframe>
+
+</body>
+</html>
