@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Manajemen Perpustakaan</title>
+    <title>Perpustakaan Lubangsa</title>
     
     <link rel="icon" type="image/png" href="logo.png">
 
@@ -41,14 +41,13 @@
             height: 100vh;
         }
 
-        /* SIDEBAR (Background Image + Transparent Gradient) */
+        /* SIDEBAR */
         .sidebar {
             width: var(--sidebar-width);
             background-image: var(--transparent-gradient), var(--image-url);
             background-size: cover;
             background-position: center center;
             background-repeat: no-repeat;
-            
             box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3); 
             overflow-y: auto; 
             position: fixed; 
@@ -61,20 +60,19 @@
         .sidebar-nav-top {
             display: flex; 
             justify-content: space-around; 
-            padding: 0;
+            padding: 5px 0; 
             margin-bottom: 5px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.2); 
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); 
         }
         .nav-tab {
             flex-grow: 1;
             text-align: center;
             text-decoration: none;
-            padding: 15px 0;
+            padding: 10px 0; 
+            margin: 0 5px; 
             color: var(--text-color-light); 
             font-weight: 500;
-            transition: background-color 0.2s, color 0.2s, border-bottom 0.2s;
-            border-bottom: 3px solid transparent; 
+            transition: background-color 0.2s, color 0.2s, border-radius 0.2s;
             cursor: pointer;
             font-size: 16px;
         }
@@ -82,24 +80,18 @@
             background-color: rgba(255, 255, 255, 0.1); 
         }
         
-        /* PERBAIKAN 1: Tab Navigasi Atas Aktif */
+        /* Navigasi Atas Aktif (Kotak Bulat Putih & Teks Gradasi) */
         .nav-tab.active {
             background-color: white; 
             font-weight: 700;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4); 
             
-            /* Gunakan gradasi pada teks */
-            background-image: var(--primary-gradient);
-            background-clip: text;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            
-            /* Tetapkan warna fallback */
-            color: #3498db; 
-            
-            /* Tambahkan garis bottom gradasi untuk aksen */
-            border-bottom: 3px solid #1abc9c; 
+            /* Teks Gradasi */
+            /* Diterapkan pada <span> di bawah */
+            color: #3498db; /* Warna fallback */
         }
-
+        
         /* Judul Menu */
         .sidebar h3 {
             color: rgba(255, 255, 255, 0.7); 
@@ -115,14 +107,14 @@
         /* Tautan Sidebar Menu */
         .sidebar a {
             display: block;
-            padding: 12px 30px;
+            padding: 12px 30px; 
+            margin: 5px 0; 
+            margin-right: 15px; 
             text-decoration: none;
             color: var(--text-color-light); 
-            /* Tambahkan posisi agar gradasi teks berfungsi optimal */
             position: relative; 
             z-index: 1; 
-            border-left: 4px solid transparent;
-            transition: background-color 0.2s, border-left-color 0.2s, color 0.2s;
+            transition: background-color 0.2s, color 0.2s;
             font-size: 15px;
             font-weight: 400;
         }
@@ -130,22 +122,32 @@
             background-color: rgba(255, 255, 255, 0.1);
         }
         
-        /* PERBAIKAN 2: Link Menu Sidebar Aktif */
+        /* Link Menu Sidebar Aktif (Kotak Kapsul Putih & Teks Gradasi) */
         .sidebar a.active {
             background-color: white; 
-            border-left-color: transparent; 
             font-weight: 600;
+            
+            border-radius: 0 50px 50px 0; 
+            margin-right: 0; 
+            padding-right: 30px; 
+            
+            box-shadow: 3px 0 15px rgba(0, 0, 0, 0.4);
+            
+            color: transparent; /* Untuk memungkinkan gradasi pada span */
+        }
 
-            /* Teks Gradasi Hijau dan Biru */
+        /* Terapkan Gradasi Teks Khusus pada SPAN di dalam semua tautan aktif */
+        .sidebar a span, .nav-tab span {
+             display: inline-block;
+             color: inherit; /* Wariskan warna dari <a> */
+        }
+
+        /* Gradasi Teks hanya untuk SPAN di dalam tautan aktif */
+        .sidebar a.active span, .nav-tab.active span {
             background-image: var(--primary-gradient);
             background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-        }
-        
-        /* Tambahan: Pastikan teks gradasi pada link aktif tidak terpotong */
-        .sidebar a.active span {
-             display: inline-block;
         }
         
         .hidden {
@@ -187,8 +189,8 @@
 
         <div class="sidebar">
             <div class="sidebar-nav-top">
-                <a class="nav-tab" id="nav-beranda">Beranda</a>
-                <a class="nav-tab" id="nav-data">Data</a>
+                <a class="nav-tab" id="nav-beranda"><span>Beranda</span></a>
+                <a class="nav-tab" id="nav-data"><span>Data</span></a>
             </div>
 
             <div class="sidebar-menu" id="menu-beranda">
@@ -203,6 +205,7 @@
                 <a href="pencarian.html" target="konten-frame"><span>Pencarian</span></a>
                 <a href="daftarbuku.html" target="konten-frame"><span>Daftar Buku</span></a>
                 <a href="keanggotaan.html" target="konten-frame"><span>Keanggotaan</span></a>
+                <a href="perbaikan.html" target="konten-frame"><span>Perbaikan</span></a>
                 <h3>Utilitas</h3>
                 <a href="cetaklabel.html" target="konten-frame"><span>Cetak Label</span></a>
                 <a href="cetakbarcode.html" target="konten-frame"><span>Cetak Barcode</span></a>
@@ -224,56 +227,71 @@
         const menuBeranda = document.getElementById('menu-beranda');
         const menuData = document.getElementById('menu-data');
         const iframe = document.getElementById('konten-frame');
-        
-        iframe.onload = () => {
-             // Pastikan selalu memuat ulang link aktif setelah iframe memuat
-             const currentSrc = iframe.contentWindow.location.pathname.split('/').pop();
-             updateSidebarActiveLink(currentSrc);
-        };
 
+        // Fungsi yang mencari dan menetapkan kelas 'active' pada link menu vertikal
         function updateSidebarActiveLink(currentSrc) {
-            document.querySelectorAll('.sidebar .sidebar-menu a').forEach(link => {
+            // Hapus kelas 'active' dari SEMUA tautan vertikal dan horizontal
+            document.querySelectorAll('.sidebar a').forEach(link => {
                 link.classList.remove('active');
             });
+
+            // Cari link yang cocok dengan URL Iframe saat ini
             const activeLink = document.querySelector(`.sidebar .sidebar-menu a[href="${currentSrc}"]`);
             if (activeLink) {
                 activeLink.classList.add('active');
             }
         }
 
+        // Fungsi yang mengontrol perpindahan antara tab 'Beranda' dan 'Data'
         function setActiveNav(activeNav) {
             navBeranda.classList.remove('active');
             navData.classList.remove('active');
             activeNav.classList.add('active');
             
+            // Tampilkan/Sembunyikan Menu
             if (activeNav === navBeranda) {
                 menuBeranda.classList.remove('hidden');
                 menuData.classList.add('hidden');
-                // Alihkan ke link aktif pertama di menu Beranda (jika ada)
-                const firstLink = menuBeranda.querySelector('a');
-                if (firstLink) iframe.src = firstLink.getAttribute('href');
             } else {
                 menuBeranda.classList.add('hidden');
                 menuData.classList.remove('hidden');
-                // Alihkan ke link aktif pertama di menu Data (jika ada)
-                const firstLink = menuData.querySelector('a');
-                if (firstLink) iframe.src = firstLink.getAttribute('href');
             }
+            
+            // Setelah tab diaktifkan, segera update link menu vertikal aktif
+            // Jika iframe sudah dimuat, gunakan src saat ini, jika belum, gunakan src default
+            const currentIframeSrc = iframe.contentWindow.location.pathname.split('/').pop() || iframe.getAttribute('src');
+            updateSidebarActiveLink(currentIframeSrc);
         }
 
-        navBeranda.addEventListener('click', () => setActiveNav(navBeranda));
-        navData.addEventListener('click', () => setActiveNav(navData));
+        // 1. Event listener untuk pemuatan Iframe
+        iframe.onload = () => {
+             const currentSrc = iframe.contentWindow.location.pathname.split('/').pop();
+             updateSidebarActiveLink(currentSrc);
+        };
         
+        // 2. Event listener untuk klik tab Beranda/Data
+        navBeranda.addEventListener('click', () => {
+            setActiveNav(navBeranda);
+            // Muat link pertama di menu Beranda jika menu sedang disembunyikan
+            const firstLink = menuBeranda.querySelector('a');
+            if (firstLink) iframe.src = firstLink.getAttribute('href');
+        });
+        navData.addEventListener('click', () => {
+            setActiveNav(navData);
+            // Muat link pertama di menu Data jika menu sedang disembunyikan
+            const firstLink = menuData.querySelector('a');
+            if (firstLink) iframe.src = firstLink.getAttribute('href');
+        });
+        
+        // 3. Event listener untuk klik link menu vertikal
         document.querySelectorAll('.sidebar .sidebar-menu a').forEach(link => {
             link.addEventListener('click', function() {
                 updateSidebarActiveLink(this.getAttribute('href'));
             });
         });
 
-        // Inisialisasi tampilan awal
-        setActiveNav(navBeranda);
-        // Panggil updateSidebarActiveLink setelah setActiveNav untuk memastikan link menu di-highlight
-        updateSidebarActiveLink(iframe.getAttribute('src')); 
+        // Inisialisasi: Pastikan Beranda aktif saat halaman dimuat
+        setActiveNav(navBeranda); 
     </script>
 </body>
 </html>
