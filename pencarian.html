@@ -13,10 +13,16 @@
         body {
             background-color: #f3f4f6;
         }
+        
+        /* 💡 PERUBAHAN UTAMA DI SINI: Background Image dengan Overlay Hitam Transparan */
         .hero-section {
-            background: linear-gradient(135deg, #0e7490 0%, #0891b2 100%);
+            background-image: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('https://www.nahdliyin.com/images/post/content/1/2023/2023-02-02/0773fcaee1bbbcad0164bf9a3ba448e2.jpg');
+            background-size: cover;
+            background-position: center;
             color: white;
+            /* Pastikan teks di atas gambar tetap terbaca */
         }
+        
         .book-card {
             transition: transform 0.2s, box-shadow 0.2s;
         }
@@ -51,20 +57,6 @@
             animation: fadeInSlide 0.3s ease-out forwards;
             opacity: 0; /* Mulai dari tersembunyi */
         }
-        /* Kelas untuk item yang akan hilang (belum digunakan di JS, tapi baik untuk persiapan) */
-        @keyframes fadeOutSlide {
-            from {
-                opacity: 1;
-                transform: translateY(0);
-            }
-            to {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-        }
-        .animate-list-item-out {
-            animation: fadeOutSlide 0.2s ease-in forwards;
-        }
 
         /* 2. ANIMASI MODAL */
         .modal-transition-bg {
@@ -79,7 +71,7 @@
 
     <div class="hero-section py-12 px-4 shadow-lg mb-8">
         <div class="max-w-4xl mx-auto text-center space-y-6">
-            <h1 class="text-3xl md:text-5xl font-bold tracking-tight">Katalog Perpustakaan</h1>
+            <h1 class="text-3xl md:text-5xl font-bold tracking-tight">Katalog Perpustakaan Publik</h1>
             <p class="text-cyan-100 text-lg">Temukan referensi, buku, dan koleksi ilmu pengetahuan kami.</p>
             
             <div class="relative max-w-2xl mx-auto mt-4">
@@ -218,7 +210,7 @@
         let isDataLoaded = false;
         let currentSelectedIndex = -1; 
         
-        // --- 2. UTILITY FUNCTIONS (TETAP SAMA) ---
+        // --- 2. UTILITY FUNCTIONS ---
         function parseTopics(topics) {
             if (Array.isArray(topics)) return topics.map(t => t.replace(/[<>]/g, '').trim());
             return [];
@@ -228,7 +220,7 @@
              return `${biblio.judul || ''} ${biblio.penulis || ''} ${biblio.penerbit || ''} ${cleanTopics.join(' ') || ''} ${biblio.isbn_issn || ''}`.toLowerCase();
         }
 
-        // --- 3. DATA LOGIC (TETAP SAMA) ---
+        // --- 3. DATA LOGIC ---
         function initializeApp() {
             db.collection('ekslempar').onSnapshot(snapshot => {
                 ekslemparDataMap.clear();
@@ -264,7 +256,7 @@
             });
         }
 
-        // --- 4. SEARCH & PAGINATION LOGIC (Diperbaiki untuk Animasi) ---
+        // --- 4. SEARCH & PAGINATION LOGIC (Dioptimalkan) ---
 
         function handleSearch() {
             const query = filterInput.value.toLowerCase().trim();
@@ -274,7 +266,7 @@
                 currentDisplayList = globalBiblioList.filter(item => item._searchableText.includes(query));
             }
             currentPage = 1;
-            // Gunakan fungsi yang disempurnakan untuk animasi
+            // Tanpa delay (perbaikan responsivitas)
             prepareAndRenderPage();
         }
 
@@ -284,35 +276,26 @@
             const totalPages = Math.ceil(totalItems / DOCUMENTS_PER_PAGE);
             const newPage = Math.floor(Math.random() * totalPages) + 1;
             currentPage = newPage;
-            // Gunakan fungsi yang disempurnakan untuk animasi
+            // Tanpa delay (perbaikan responsivitas)
             prepareAndRenderPage();
             window.scrollTo(0, 0);
         }
 
         /**
-         * Fungsi ini memastikan animasi fade-out item lama terlihat 
-         * sebelum merender item baru (fade-in).
+         * Fungsi yang diperbarui: Menghapus jeda (setTimeout) agar
+         * pemuatan daftar buku lebih cepat saat search/pindah halaman.
          */
         function prepareAndRenderPage(scrollToTop = true) {
-            // Tambahkan kelas animasi keluar ke item yang ada
-            Array.from(dataListContainer.children).forEach(child => {
-                child.classList.add('animate-list-item-out');
-            });
-            
-            // Tunggu sebentar (sesuai durasi fadeOutSlide: 200ms)
-            setTimeout(() => {
-                renderCurrentPage();
-                if(scrollToTop) window.scrollTo(0, 0);
-            }, 200); 
+            // Render langsung tanpa delay.
+            renderCurrentPage();
+            if(scrollToTop) window.scrollTo(0, 0);
         }
 
         function renderCurrentPage() {
             const totalItems = currentDisplayList.length;
             const totalPages = Math.ceil(totalItems / DOCUMENTS_PER_PAGE);
             
-            // ... (Logika penentuan item dan render tetap sama) ...
             if (totalItems === 0) {
-                // ... (Rendering "Tidak ditemukan" tetap sama) ...
                 dataListContainer.innerHTML = `
                     <div class="text-center py-12 bg-white rounded-lg shadow">
                         <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -329,7 +312,7 @@
             const endIndex = startIndex + DOCUMENTS_PER_PAGE;
             const items = currentDisplayList.slice(startIndex, endIndex);
 
-            dataListContainer.innerHTML = ''; // Kosongkan container setelah animasi keluar
+            dataListContainer.innerHTML = ''; // Kosongkan container
             
             items.forEach((biblio, indexInPage) => {
                 const biblioCodes = Array.isArray(biblio.kode) ? biblio.kode : [];
@@ -354,7 +337,7 @@
                         </div>`;
 
                 const card = document.createElement('div');
-                // Tambahkan kelas animasi dan staggered delay
+                // Menggunakan delay stagger 50ms untuk animasi masuk
                 card.className = "book-card bg-white rounded-xl p-5 shadow-sm border border-gray-200 flex flex-col md:flex-row gap-5 cursor-pointer hover:border-cyan-300 animate-list-item"; 
                 card.style.animationDelay = `${indexInPage * 0.05}s`; 
                 
@@ -413,7 +396,6 @@
                         Acak
                      `;
                      randomBtn.className = 'inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50 transition';
-                     // Gunakan goToRandomPage yang sudah ditingkatkan
                      randomBtn.onclick = goToRandomPage; 
                      navWrapper.appendChild(randomBtn);
                 
@@ -426,7 +408,7 @@
                     prev.innerHTML = '&larr;';
                     prev.className = `px-3 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium ${currentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'}`;
                     prev.disabled = currentPage === 1;
-                    // Ubah onclick untuk menggunakan prepareAndRenderPage
+                    // Menggunakan prepareAndRenderPage yang dioptimalkan
                     prev.onclick = () => { currentPage--; prepareAndRenderPage(true); };
                     nav.appendChild(prev);
 
@@ -441,7 +423,7 @@
                     next.innerHTML = '&rarr;';
                     next.className = `px-3 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium ${currentPage === totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'}`;
                     next.disabled = currentPage === totalPages;
-                    // Ubah onclick untuk menggunakan prepareAndRenderPage
+                    // Menggunakan prepareAndRenderPage yang dioptimalkan
                     next.onclick = () => { currentPage++; prepareAndRenderPage(true); };
                     nav.appendChild(next);
                     
@@ -452,9 +434,9 @@
             });
         }
 
-        // --- 5. MODAL DETAIL LOGIC (Diperbaiki untuk Animasi Navigasi Detail) ---
+        // --- 5. MODAL DETAIL LOGIC (Dioptimalkan) ---
 
-        // Fungsi pembantu untuk membuka modal dengan data baru
+        // Fungsi pembantu untuk membuka modal dengan data baru (Tidak diubah)
         function populateAndShowModal(index) {
             const biblio = currentDisplayList[index];
             currentSelectedIndex = index;
@@ -549,9 +531,7 @@
         }
 
         /**
-         * FUNGSI BARU: Mengganti detail saat tombol Maju/Mundur di modal diklik
-         * Ini mensimulasikan tutup-buka dengan cepat untuk memicu animasi
-         * @param {number} direction -1 untuk Sebelumnya, 1 untuk Selanjutnya
+         * FUNGSI DIPERBAHARUI: Menghilangkan jeda yang disengaja.
          */
         function navDetail(direction) {
             let newIndex = currentSelectedIndex + direction;
@@ -561,15 +541,14 @@
                 detailModalContent.classList.remove('opacity-100', 'scale-100');
                 detailModalContent.classList.add('opacity-0', 'scale-95');
                 
-                // 2. Tunggu sebentar (setengah durasi animasi)
+                // 2. Isi konten baru setelah jeda sangat singkat untuk transisi
                 setTimeout(() => {
-                    // 3. Isi konten dengan data baru
                     populateAndShowModal(newIndex);
-                }, 125); // 125ms = setengah dari 250ms durasi transisi
+                }, 100); 
             }
         }
         
-        // Perbarui fungsi randomDetail agar menggunakan pola transisi
+        // Perbarui fungsi randomDetail agar menggunakan pola transisi yang lebih cepat
         function randomDetail() {
             const totalItems = currentDisplayList.length;
             if (totalItems <= 1) return;
@@ -583,11 +562,11 @@
             detailModalContent.classList.remove('opacity-100', 'scale-100');
             detailModalContent.classList.add('opacity-0', 'scale-95');
             
-            // 2. Tunggu sebentar
+            // 2. Isi konten setelah jeda sangat singkat untuk transisi
             setTimeout(() => {
                 // 3. Isi konten dengan data baru
                 populateAndShowModal(newIndex);
-            }, 125);
+            }, 100);
         }
         
         // --- 6. EVENT LISTENERS ---
