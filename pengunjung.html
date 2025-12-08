@@ -4,49 +4,116 @@
     <meta charset="UTF-8">
     <title>Pengunjung</title>
     
-    <link rel="icon" href="logo.png" type="image/png"> 
+    <link rel="icon" href="logo.png" type="image/png">
     
     <style>
-        /* Mengatur tata letak halaman menggunakan Flexbox */
         body {
             display: flex;
             margin: 0;
             height: 100vh;
             overflow: hidden; 
             font-family: Arial, sans-serif;
+            position: relative;
         }
 
-        /* Styling dasar untuk semua iframe */
-        iframe {
+        .pencarian-container {
+            width: 100%; 
             height: 100%;
-            box-sizing: border-box;
-            background-color: white;
-            border: none; 
+            position: relative;
         }
 
-        /* Iframe untuk Pencarian (Kiri, 60% Lebar) */
         .iframe-pencarian {
-            /* flex-grow: 6; */ /* Tidak perlu jika menggunakan width */
-            width: 60%; 
+            height: 100%;
+            width: 100%; 
+            border: none; 
             border-right: 1px solid #ddd; 
         }
 
-        /* Iframe untuk Form (Kanan, 40% Lebar) - Garis Luar Kotak Penuh */
+        #formOverlay {
+            display: none; 
+            position: fixed; 
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh; 
+            background-color: rgba(0, 0, 0, 0.5); 
+            z-index: 100; 
+            transition: opacity 0.3s ease-in-out;
+            opacity: 0; 
+        }
+
         .iframe-form {
-            /* flex-grow: 4; */ /* Tidak perlu jika menggunakan width */
+            position: fixed; 
+            top: 0;
+            right: 0;
+            height: 100vh; 
             width: 40%; 
-            
-            /* Garis luar berbentuk kotak penuh */
-            border: 2px solid #333; 
-            padding: 5px; 
+            box-sizing: border-box;
+            background-color: white;
+            border: none; 
+            z-index: 101;
+            transform: translateX(100%); 
+            transition: transform 0.4s ease-out; 
+        }
+
+        .form-active {
+            opacity: 1 !important;
+        }
+        
+        .form-active .iframe-form {
+            transform: translateX(0) !important;
+        }
+        
+        #btnBukaForm {
+            position: absolute;
+            top: 10px;
+            left: 10px; 
+            z-index: 10; 
+            padding: 8px 15px;
+            background: linear-gradient(to right, #28a745, #007bff);
+            color: white;
+            border: none;
+            border-radius: 8px; 
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
         }
     </style>
 </head>
 <body>
 
-    <iframe class="iframe-pencarian" src="pencarian.html" title="Konten Pencarian"></iframe>
+    <div class="pencarian-container">
+        
+        <button id="btnBukaForm" onclick="toggleForm(true)">Isi Kunjungan</button>
+        
+        <iframe class="iframe-pencarian" src="pencarian.html" title="Konten Pencarian"></iframe>
+    </div>
+    
+    <div id="formOverlay" onclick="toggleForm(false)">
+        <iframe class="iframe-form" src="form.html" title="Konten Formulir" onclick="event.stopPropagation()"></iframe>
+    </div>
 
-    <iframe class="iframe-form" src="form.html" title="Konten Formulir"></iframe>
-
+    <script>
+        function toggleForm(show) {
+            const overlay = document.getElementById('formOverlay');
+            
+            if (show) {
+                overlay.style.display = 'block'; 
+                setTimeout(() => {
+                    overlay.classList.add('form-active');
+                }, 10);
+            } else {
+                overlay.classList.remove('form-active');
+                
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 400); 
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+             document.getElementById('formOverlay').style.display = 'none';
+        });
+    </script>
 </body>
 </html>
