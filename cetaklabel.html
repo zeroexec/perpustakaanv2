@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cetak Label Nomor Panggil</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        /* CSS Khusus untuk Tampilan Cetak */
+        @media print {
+            /* Sembunyikan semua elemen kontrol saat mencetak */
+            .no-print {
+                display: none !important;
+            }
+            /* Pastikan halaman cetak hanya menampilkan label */
+            body {
+                margin: 0;
+                padding: 0;
+            }
+            /* Tampilkan konten label saja */
+            #printArea {
+                /* PERUBAHAN UTAMA: Menggunakan Flexbox untuk tata letak fleksibel */
+                display: flex !important; 
+                flex-wrap: wrap; /* Memungkinkan label pindah ke baris baru */
+                width: 100%;
+                gap: 5px; /* Jarak antar label */
+            }
+            /* Gaya untuk memotong teks judul jika terlalu panjang */
+            .title-truncate {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                max-width: 100%; 
+                text-align: center;
+            }
+        }
+        
+        /* Style untuk Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #a1a1aa; /* zinc-400 */
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-6">
+
+    <div class="max-w-7xl mx-auto bg-white p-6 rounded-lg shadow-xl no-print">
+        
+        <div class="flex justify-between items-center mb-6 border-b pb-3">
+            <h1 class="text-3xl font-bold text-gray-800">Cetak Label Nomor Panggil Ekslempar</h1>
+            <a href="daftarbuku.html" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition duration-150 shadow-md text-sm">
+                < Kembali ke Daftar Bibliografi
+            </a>
+        </div>
+        
+        <div class="mb-6 p-4 border border-cyan-200 rounded-lg bg-cyan-50">
+            <h2 class="text-xl font-semibold mb-3 text-cyan-700">Pengaturan Label</h2>
+            <form id="labelForm" class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
+                
+                <div class="sm:col-span-2">
+                    <label for="customHeaderName" class="block text-sm font-medium text-gray-700">Nama Perpustakaan (Header)</label>
+                    <input type="text" id="customHeaderName" value="Perputakaan Lubangsa" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-cyan-500 focus:border-cyan-500">
+                </div>
+
+                <div class="sm:col-span-2 flex items-center gap-4">
+                    <div class="flex items-center">
+                        <input id="includeTitle" type="checkbox" class="h-4 w-4 text-cyan-600 border-gray-300 rounded" checked>
+                        <label for="includeTitle" class="ml-2 block text-sm font-medium text-gray-700">Tampilkan Judul</label>
+                    </div>
+                    <div class="flex items-center">
+                        <input id="includeKode" type="checkbox" class="h-4 w-4 text-cyan-600 border-gray-300 rounded">
+                        <label for="includeKode" class="ml-2 block text-sm font-medium text-gray-700">Tampilkan Kode Ekslempar</label>
+                    </div>
+                </div>
+
+                <div class="sm:col-span-4">
+                    <button type="submit" class="bg-cyan-700 hover:bg-cyan-800 text-white font-bold py-2 px-4 rounded-lg transition duration-150 shadow-md w-full" id="printBtn" disabled>
+                        Cetak <span id="selectedCountDisplay">(0)</span> Label
+                    </button>
+                </div>
+            </form>
+            <p id="message" class="mt-4 text-sm text-red-500"></p>
+        </div>
+        
+        <div class="mb-4 flex justify-between items-center">
+             <h2 class="text-xl font-semibold text-gray-700">Pilih Ekslempar (<span id="totalItems">0</span> Total)</h2>
+             <button onclick="toggleSelectAll()" id="selectAllBtn" class="text-sm text-cyan-700 hover:text-cyan-900 font-medium">Pilih Semua</button>
+        </div>
+
+        <div id="ekslemparList" class="space-y-3 max-h-96 overflow-y-auto custom-scrollbar p-2 border rounded-lg">
+            <p class="text-center text-gray-500">Memuat data Ekslempar...</p>
+        </div>
+        
+    </div>
+
+    <div id="printArea" class="hidden">
+        </div>
+
+    <script>
+        // 1. KONFIGURASI FIREBASE ANDA
+        const firebaseConfig = {
+            apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
+            authDomain: "databuku-6385c.firebaseapp.com",
+            databaseURL: "https://databuku-6385c-default-rtdb.firebaseio.com",
+            projectId: "databuku-6385c",
+            storageBucket: "databuku-6385c.firebasestorage.app",
+            messagingSenderId: "844439345466",
+            appId: "1:844439345466:web:fb90dfc8337a96f0621803"
+        };
+
+        // 2. INISIALISASI FIREBASE
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // 3. ELEMEN DOM & GLOBAL DATA
+        const ekslemparListContainer = document.getElementById('ekslemparList');
+        const selectedCountDisplay = document.getElementById('selectedCountDisplay');
+        const totalItemsDisplay = document.getElementById('totalItems');
+        const printBtn = document.getElementById('printBtn');
+        const printArea = document.getElementById('printArea');
+        const labelForm = document.getElementById('labelForm');
+        const message = document.getElementById('message');
+        const selectAllBtn = document.getElementById('selectAllBtn');
+        
+        let allEkslempar = []; // Cache semua data Ekslempar
+        let selectedEkslemparIds = new Set();
+        let isSelectAll = false;
+
+        // --- FUNGSI UTILITY & LOGIKA SELECT ---
+        function showMessage(text, isError = false) {
+            message.textContent = text;
+            message.className = `mt-4 text-sm font-medium ${isError ? 'text-red-600' : 'text-green-600'}`;
+        }
+        
+        function updateSelectedCount() {
+            const count = selectedEkslemparIds.size;
+            selectedCountDisplay.textContent = `(${count})`;
+            printBtn.disabled = count === 0;
+            selectAllBtn.textContent = isSelectAll ? 'Batal Pilih Semua' : 'Pilih Semua';
+        }
+
+        function toggleSelection(ekslemparId) {
+            if (selectedEkslemparIds.has(ekslemparId)) {
+                selectedEkslemparIds.delete(ekslemparId);
+                document.getElementById(`checkbox-${ekslemparId}`).checked = false;
+            } else {
+                selectedEkslemparIds.add(ekslemparId);
+                document.getElementById(`checkbox-${ekslemparId}`).checked = true;
+            }
+            isSelectAll = selectedEkslemparIds.size === allEkslempar.length;
+            updateSelectedCount();
+        }
+        
+        function toggleSelectAll() {
+            if (isSelectAll) {
+                selectedEkslemparIds.clear();
+            } else {
+                allEkslempar.forEach(ekslempar => selectedEkslemparIds.add(ekslempar.id));
+            }
+            isSelectAll = !isSelectAll;
+            renderEkslemparList(allEkslempar); 
+            updateSelectedCount();
+        }
+
+        function renderEkslemparList(list) {
+            ekslemparListContainer.innerHTML = '';
+            totalItemsDisplay.textContent = list.length;
+            
+            if (list.length === 0) {
+                ekslemparListContainer.innerHTML = '<p class="text-center text-gray-500">Tidak ada data Ekslempar yang ditemukan.</p>';
+                return;
+            }
+
+            list.forEach(ekslempar => {
+                const isSelected = selectedEkslemparIds.has(ekslempar.id);
+                const itemDiv = document.createElement('div');
+                
+                itemDiv.className = `flex items-center p-3 rounded-lg border cursor-pointer transition-all duration-150 ${isSelected ? 'bg-cyan-100 border-cyan-400 shadow' : 'bg-white border-gray-200 hover:bg-gray-50'}`;
+                itemDiv.setAttribute('data-id', ekslempar.id);
+                itemDiv.onclick = () => toggleSelection(ekslempar.id);
+
+                itemDiv.innerHTML = `
+                    <input type="checkbox" id="checkbox-${ekslempar.id}" ${isSelected ? 'checked' : ''} class="w-5 h-5 text-cyan-600 bg-gray-100 border-gray-300 rounded focus:ring-cyan-500" onclick="event.stopPropagation(); toggleSelection('${ekslempar.id}')">
+                    <div class="ml-4 flex-grow">
+                        <p class="text-sm font-semibold text-gray-800">${ekslempar.nomor_panggil || 'NO PANGGIL KOSONG'}</p>
+                        <p class="text-xs text-gray-600">Kode Ekslempar: ${ekslempar.kode || '-'}</p>
+                        <p class="text-xs text-gray-500">Judul: ${ekslempar.judul || '-'}</p>
+                    </div>
+                    <div class="text-sm text-cyan-700">${ekslempar.lokasi_rak || 'Rak Kosong'}</div>
+                `;
+                ekslemparListContainer.appendChild(itemDiv);
+            });
+            updateSelectedCount();
+        }
+        
+        // --- LOGIKA CETAK LABEL (Fleksibel) ---
+        function generateLabels(e) {
+            e.preventDefault();
+            
+            const count = selectedEkslemparIds.size;
+            if (count === 0) {
+                showMessage('Pilih minimal satu Ekslempar untuk dicetak.', true);
+                return;
+            }
+
+            showMessage(`Mempersiapkan ${count} label untuk dicetak...`);
+            
+            // Ukuran dan Opsi Ditetapkan Secara Internal
+            const fixedWidth = '10cm'; // Lebar label tetap 10cm
+            const baseFontSize = '16px'; 
+            const customHeaderName = document.getElementById('customHeaderName').value || 'Perputakaan Lubangsa';
+            const includeTitle = document.getElementById('includeTitle').checked;
+            const includeKode = document.getElementById('includeKode').checked;
+            
+            printArea.innerHTML = ''; // Kosongkan area cetak
+            
+            const selectedData = allEkslempar.filter(e => selectedEkslemparIds.has(e.id));
+            
+            selectedData.forEach(ekslempar => {
+                const label = document.createElement('div');
+                
+                // Konfigurasi Label Kontainer (Tinggi Auto)
+                label.className = 'label-box flex flex-col justify-start p-0 border border-black break-words text-center';
+                label.style.width = fixedWidth; 
+                label.style.height = 'auto'; // PENTING: Tinggi otomatis
+                label.style.fontSize = baseFontSize; // Font size dasar
+                label.style.lineHeight = '1.1'; 
+                label.style.boxSizing = 'border-box'; 
+                label.style.padding = '0'; 
+
+                // 1. Header Div (Nama Perpustakaan)
+                const header = document.createElement('div');
+                header.textContent = customHeaderName; 
+                header.style.backgroundColor = '#0d9488'; // Cyan-700
+                header.style.color = 'white';
+                header.style.fontWeight = 'bold'; 
+                header.style.textAlign = 'center';
+                header.style.width = '100%';
+                header.style.fontSize = '120%'; // Lebih besar dari isi label
+                header.style.padding = '0 1px'; 
+                header.style.lineHeight = '1.0'; 
+
+                label.appendChild(header);
+
+                // 2. Content Div (Nomor Panggil, Judul, Kode Ekslempar)
+                const callNumberLines = (ekslempar.nomor_panggil || 'XXX').split(' ').map(line => `<span>${line}</span>`).join('<br>');
+                const titleText = ekslempar.judul || 'Judul Tidak Tersedia';
+                const kodeText = ekslempar.kode || 'KOSONG';
+                
+                let contentHtml = '';
+
+                // Judul (Opsional) - Tidak Bold
+                if (includeTitle) {
+                    contentHtml += `
+                        <div class="title-truncate" style="font-size: 80%; color: #4b5563; line-height: 1.0; margin-top: 0; padding: 1px 2px;">
+                            ${titleText}
+                        </div>
+                    `;
+                }
+                
+                // Nomor Panggil (Wajib) - Tidak Bold
+                contentHtml += `
+                    <div style="font-size: 100%; line-height: 1.1; padding: 2px;">
+                        ${callNumberLines}
+                    </div>
+                `;
+
+                // Kode Ekslempar (Opsional) - Tidak Bold
+                if (includeKode) {
+                    contentHtml += `
+                        <div style="font-size: 70%; line-height: 1.0; padding: 1px 2px;">
+                            Kode: ${kodeText}
+                        </div>
+                    `;
+                }
+
+                const contentDiv = document.createElement('div');
+                contentDiv.style.display = 'flex';
+                contentDiv.style.flexDirection = 'column';
+                contentDiv.style.justifyContent = 'flex-start'; 
+                contentDiv.style.alignItems = 'center';
+                contentDiv.style.width = '100%';
+
+                contentDiv.innerHTML = contentHtml;
+                
+                label.appendChild(contentDiv);
+                
+                printArea.appendChild(label);
+            });
+            
+            window.print();
+        }
+
+        // --- INTI APLIKASI ---
+        function initializeApp() {
+            db.collection('ekslempar').orderBy('kode').onSnapshot(snapshot => {
+                allEkslempar = [];
+                snapshot.forEach(doc => {
+                    allEkslempar.push({ id: doc.id, ...doc.data() }); 
+                });
+
+                showMessage(`✅ ${allEkslempar.length} Ekslempar termuat. Pilih data yang akan dicetak.`); 
+                renderEkslemparList(allEkslempar);
+
+            }, error => {
+                 console.error("Error mendengarkan Ekslempar:", error);
+                 showMessage(`❌ Gagal koneksi Ekslempar: ${error.message}`, true);
+            });
+
+            labelForm.addEventListener('submit', generateLabels);
+        }
+
+        window.onload = initializeApp;
+    </script>
+</body>
+</html>

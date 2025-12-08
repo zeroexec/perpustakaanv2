@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daftar Pinjaman Aktif</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <style>
+        /* --- TEMA WARNA CUSTOM - RAPI, BERSIH, PROFESIONAL, LEMBUT --- */
+        :root {
+            /* Gradasi Akses (Hijau-Biru Lembut) */
+            --color-gradient-start: #00a8cc; /* Soft Cyan */
+            --color-gradient-end: #4a90e2; /* Soft Professional Blue */
+            
+            /* Warna Dasar */
+            --color-primary-light: #f0f9ff; /* Sangat terang, untuk highlight lembut */
+            --color-primary-medium: #80c4e7; /* Untuk ring fokus */
+            --color-primary-border: #d1e9f7; /* Border lembut */
+            --color-primary-text: #075985; /* Deep blue untuk kontras */
+            --color-dark-text: #374151; /* Standard dark text */
+        }
+
+        /* Gradient Class */
+        .bg-primary-gradient { 
+            background-image: linear-gradient(to right, var(--color-gradient-start), var(--color-gradient-end)); 
+        }
+        .text-primary-gradient {
+            background-image: linear-gradient(to right, var(--color-gradient-start), var(--color-gradient-end));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent; 
+            display: inline-block;
+        }
+
+        /* Table Header Styles */
+        .table-header {
+            background-color: var(--color-primary-light); 
+            color: var(--color-primary-text);
+        }
+
+        /* Input Focus Ring */
+        .input-focus-style:focus {
+             --tw-ring-color: var(--color-primary-medium);
+             border-color: var(--color-primary-medium);
+        }
+        
+        /* Modal Style - Bersih dan Berpusat */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 100; 
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow-y: auto; 
+            background-color: rgba(0,0,0,0.3); /* Backdrop lebih lembut */
+            justify-content: center; 
+            align-items: center; 
+            padding: 20px;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            padding: 30px; 
+            border-radius: 12px; 
+            width: 95%;
+            max-width: 450px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); 
+            transition: all 0.3s ease-out;
+        }
+        .modal-confirm-content {
+            max-width: 380px;
+            padding: 30px;
+            text-align: center; 
+        }
+
+        /* TOAST NOTIFICATION CONTAINER STYLE */
+        #toastContainer {
+            position: fixed;
+            bottom: 20px; 
+            right: 20px;
+            z-index: 110; 
+            display: flex;
+            flex-direction: column-reverse; 
+            gap: 10px;
+        }
+        .toast {
+            padding: 12px 20px; 
+            border-radius: 8px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); 
+            color: white;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+            font-size: 0.9rem; 
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        .toast-success { background-color: #10b981; } /* Green */
+        .toast-error { background-color: #ef4444; } /* Red */
+    </style>
+</head>
+<body class="bg-gray-100 p-4 sm:p-8">
+<div class="container max-w-7xl mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-2xl">
+  
+    <div class="mb-6 border-b pb-4">
+        <h3 class="text-3xl font-extrabold text-primary-gradient uppercase tracking-tight">
+            <i class="fas fa-book-reader mr-2"></i> Daftar Pinjaman Aktif
+        </h3>
+        <p id="totalLoansInfo" class="text-sm text-gray-500 mt-1">Memuat data...</p>
+    </div>
+
+    <div class="mb-6 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
+        <input type="text" id="loanFilter" placeholder="Cari nama, judul, atau kode ekslempar..." 
+            class="input-focus-style flex-grow p-3 border border-gray-300 rounded-lg text-base shadow-sm transition">
+        
+        <select id="loanSort" class="input-focus-style p-3 border border-gray-300 rounded-lg shadow-sm transition w-full sm:w-48">
+            <option value="tgl_kembali_due_asc">Urutkan: Tgl Due Terdekat</option>
+            <option value="tgl_kembali_due_desc">Urutkan: Tgl Due Terjauh</option>
+            <option value="anggota_nama_asc">Urutkan: Nama Anggota (A-Z)</option>
+        </select>
+    </div>
+
+    <div class="overflow-x-auto rounded-xl border border-gray-200 shadow-lg">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="table-header">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Peminjam</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Buku</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Kode/Rak</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Tgl Due</th>
+                    <th class="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider">Denda</th>
+                    <th class="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider">Aksi</th>
+                </tr>
+            </thead>
+            <tbody id="loanList" class="bg-white divide-y divide-gray-100">
+                <tr>
+                    <td colspan="6" class="p-6 text-center text-gray-500">Mohon tunggu, memuat data pinjaman aktif...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div id="noDataMessage" class="p-6 text-center text-gray-500 hidden">
+        <i class="fas fa-check-circle text-4xl text-green-500 mb-2"></i>
+        <p class="text-lg font-semibold">Tidak ada pinjaman aktif saat ini.</p>
+        <p class="text-sm">Semua buku sudah kembali. Sistem siap digunakan!</p>
+    </div>
+
+</div>
+
+<div id="toastContainer"></div>
+
+<div id="customDateModal" class="modal">
+    <div class="modal-content">
+        <div class="flex justify-between items-center border-b pb-3 mb-4">
+            <h3 class="text-xl font-bold text-primary-gradient">Ubah Tanggal Kembali (Due)</h3>
+            <button onclick="tutupCustomDateModal()" class="text-gray-400 hover:text-gray-800 text-3xl leading-none p-1 rounded-full hover:bg-gray-100 transition">&times;</button>
+        </div>
+
+        <p id="customDateLoanInfo" class="text-sm text-gray-700 mb-4 font-medium"></p>
+        
+        <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <label for="inputNewDueDate" class="block text-sm font-medium text-gray-700 mb-1">Tanggal Kembali Baru</label>
+            <input type="date" id="inputNewDueDate" 
+                   class="input-focus-style w-full p-2 border border-gray-300 rounded-lg text-sm shadow-sm transition"
+                   data-loan-id="">
+        </div>
+
+        <div class="mt-6">
+            <button id="btnSaveNewDueDate" onclick="simpanCustomDate()" class="w-full py-3 px-4 rounded-xl text-sm font-bold bg-primary-gradient text-white hover:opacity-95 transition duration-200 shadow-md">
+                SIMPAN TANGGAL BARU
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="returnConfirmModal" class="modal">
+    <div class="modal-content modal-confirm-content">
+        <div class="text-center">
+            <i class="fas fa-undo text-5xl text-red-500 mb-4"></i>
+            <h3 class="text-2xl font-bold mb-3 text-dark-text">Konfirmasi Pengembalian</h3>
+            <p id="returnBookTitle" class="text-gray-600 mb-4 font-medium italic"></p>
+            
+            <div id="returnFineInfo" class="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm mb-4 hidden">
+                </div>
+
+            <div class="flex justify-between space-x-3 mt-5">
+                <button onclick="tutupReturnConfirmModal()" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 transition">
+                    Batal
+                </button>
+                <button id="btnReturnConfirm" class="w-full py-2 px-4 rounded-lg text-sm font-bold bg-red-600 text-white hover:bg-red-700 transition shadow-md">
+                    Kembalikan
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="renewConfirmModal" class="modal">
+    <div class="modal-content modal-confirm-content">
+        <div class="text-center">
+            <i class="fas fa-history text-5xl text-orange-400 mb-4"></i>
+            <h3 class="text-2xl font-bold mb-3 text-dark-text">Konfirmasi Perpanjangan</h3>
+            <p class="text-gray-600 mb-4">Perpanjang pinjaman untuk:</p>
+            <p class="text-lg font-bold italic text-dark-text mb-4" id="renewBookTitleTarget"></p>
+            
+            <div id="renewNewDateInfo" class="p-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm mb-4">
+                Tanggal Kembali Baru: <span id="newDueDateDisplayTarget" class="font-bold"></span>
+            </div>
+
+            <div class="flex justify-between space-x-3 mt-5">
+                <button onclick="tutupRenewConfirmModal()" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 transition">
+                    Batal
+                </button>
+                <button id="btnRenewConfirm" class="w-full py-2 px-4 rounded-lg text-sm font-bold bg-orange-500 text-white hover:bg-orange-600 transition shadow-md">
+                    Perpanjang
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// 1. KONFIGURASI FIREBASE
+const firebaseConfig = {
+    apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
+    authDomain: "databuku-6385c.firebaseapp.com",
+    projectId: "databuku-6385c",
+};
+const app = firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// 2. PATH KOLEKSI
+const PATH_TRANSAKSI = "transaksi_pinjam"; 
+
+// 3. ELEMEN DOM
+const loanList = document.getElementById("loanList");
+const loanFilter = document.getElementById("loanFilter");
+const loanSort = document.getElementById("loanSort");
+const totalLoansInfo = document.getElementById("totalLoansInfo");
+const noDataMessage = document.getElementById("noDataMessage");
+const toastContainer = document.getElementById("toastContainer"); 
+
+// Modal Custom Date
+const customDateModal = document.getElementById("customDateModal");
+const inputNewDueDate = document.getElementById("inputNewDueDate");
+const btnSaveNewDueDate = document.getElementById("btnSaveNewDueDate");
+const customDateLoanInfo = document.getElementById("customDateLoanInfo");
+
+// Modal Kembalikan
+const returnConfirmModal = document.getElementById("returnConfirmModal");
+const returnFineInfo = document.getElementById("returnFineInfo");
+const btnReturnConfirm = document.getElementById("btnReturnConfirm");
+const returnBookTitle = document.getElementById("returnBookTitle");
+
+// Modal Perpanjang
+const renewConfirmModal = document.getElementById("renewConfirmModal");
+const renewBookTitleTarget = document.getElementById("renewBookTitleTarget");
+const newDueDateDisplayTarget = document.getElementById("newDueDateDisplayTarget");
+const btnRenewConfirm = document.getElementById("btnRenewConfirm");
+
+
+// 4. DATA GLOBAL DAN STATUS
+let activeLoanData = []; 
+let loanDurationSettings = {}; 
+let dailyFineAmount = 1000; 
+
+// --- UTILITY & HELPER FUNCTIONS (Sama seperti file sebelumnya) ---
+
+function showToast(message, isError = true) {
+    const toast = document.createElement('div');
+    toast.className = `toast ${isError ? 'toast-error' : 'toast-success'}`;
+    toast.textContent = message;
+    toastContainer.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10);
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => toast.remove());
+    }, 3000);
+}
+
+function getDueDate(days) {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return date.toISOString().split('T')[0]; 
+}
+
+function calculateLateFine(dueDate, finePerDay) {
+    const due = new Date(dueDate);
+    const today = new Date(getDueDate(0)); 
+    due.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    const diffTime = today - due;
+    let daysLate = 0;
+    if (diffTime > 0) {
+        daysLate = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
+    const fineAmount = daysLate * finePerDay;
+    return { daysLate, fineAmount };
+}
+
+function formatRupiah(number) {
+    return `Rp ${number.toLocaleString('id-ID')}`;
+}
+
+// --- RENDERING DAN LOGIKA UTAMA ---
+
+function renderLoanList() {
+    loanList.innerHTML = '';
+    
+    // 1. Filter
+    const query = loanFilter.value.toLowerCase().trim();
+    const filteredLoans = activeLoanData.filter(loan => {
+        const searchableText = `${loan.anggota_nama} ${loan.biblio_judul} ${loan.ekslempar_kode} ${loan.anggota_id}`.toLowerCase();
+        return searchableText.includes(query);
+    });
+
+    // 2. Sort
+    const sortValue = loanSort.value;
+    filteredLoans.sort((a, b) => {
+        if (sortValue === 'anggota_nama_asc') {
+            return a.anggota_nama.localeCompare(b.anggota_nama);
+        }
+        
+        const dateA = new Date(a.tgl_kembali_due);
+        const dateB = new Date(b.tgl_kembali_due);
+
+        if (sortValue === 'tgl_kembali_due_asc') {
+            return dateA - dateB; 
+        } else if (sortValue === 'tgl_kembali_due_desc') {
+            return dateB - dateA;
+        }
+        return 0;
+    });
+
+    totalLoansInfo.textContent = `Total Pinjaman Aktif: ${filteredLoans.length} dokumen.`;
+    
+    if (filteredLoans.length === 0) {
+        loanList.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-gray-500">Tidak ada pinjaman aktif yang cocok dengan filter.</td></tr>`;
+        noDataMessage.classList.remove('hidden'); 
+        if (!query) {
+            // Tampilkan pesan kosong jika tidak ada filter dan data memang kosong
+            noDataMessage.innerHTML = `<i class="fas fa-check-circle text-4xl text-green-500 mb-2"></i><p class="text-lg font-semibold">Tidak ada pinjaman aktif saat ini.</p><p class="text-sm">Semua buku sudah kembali. Sistem siap digunakan!</p>`;
+        } else {
+             noDataMessage.classList.add('hidden'); // Sembunyikan jika ada filter
+        }
+        return;
+    }
+
+    noDataMessage.classList.add('hidden');
+
+    filteredLoans.forEach(loan => {
+        const { daysLate, fineAmount } = calculateLateFine(loan.tgl_kembali_due, dailyFineAmount); 
+        
+        let dueClass = 'text-green-600 font-medium';
+        let fineText = 'Tidak Ada';
+
+        if (daysLate > 0) {
+            dueClass = 'text-red-600 font-extrabold';
+            fineText = `<span class="text-red-600 font-extrabold">${formatRupiah(fineAmount)}</span> (${daysLate} hr)`;
+        } else if (daysLate === 0) {
+            // Dalam 1 hari ke depan akan due
+            const oneDay = 1000 * 60 * 60 * 24;
+            const today = new Date(getDueDate(0));
+            const dueDate = new Date(loan.tgl_kembali_due);
+            const timeDiff = dueDate.getTime() - today.getTime();
+            
+            if (timeDiff <= oneDay) {
+                dueClass = 'text-orange-500 font-extrabold';
+            }
+        }
+        
+        const row = document.createElement('tr');
+        row.className = 'hover:bg-gray-50 transition duration-150';
+        row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">
+                <p class="text-sm font-semibold text-dark-text">${loan.anggota_nama}</p>
+                <p class="text-xs text-gray-500">ID: ${loan.anggota_id} | ${loan.anggota_role}</p>
+            </td>
+            <td class="px-6 py-4 max-w-xs truncate">
+                <p class="text-sm font-medium text-primary-text">${loan.biblio_judul}</p>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <p class="text-sm font-medium text-dark-text">${loan.ekslempar_kode}</p>
+                <p class="text-xs text-gray-500">Rak: ${loan.biblio_lokasi_rak || 'N/A'}</p>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="text-sm ${dueClass}">${loan.tgl_kembali_due}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-center">
+                <p class="text-sm">${fineText}</p>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
+                <div class="flex flex-col space-y-1">
+                    <button onclick="tampilkanKembalikanConfirmModal('${loan.id}', '${fineAmount}', '${daysLate}', '${loan.biblio_judul}')" 
+                        class="text-xs px-2 py-1 rounded-md bg-red-500 text-white hover:bg-red-600 transition shadow-sm">
+                        <i class="fas fa-undo"></i> Kembali
+                    </button>
+                    <button onclick="tampilkanPerpanjangConfirmModal('${loan.id}', '${loan.anggota_role}', '${loan.biblio_judul}')" 
+                        class="text-xs px-2 py-1 rounded-md bg-orange-400 text-white hover:bg-orange-500 transition shadow-sm disabled:opacity-50">
+                        <i class="fas fa-history"></i> Perpanjang
+                    </button>
+                    <button onclick="tampilkanCustomDateModal('${loan.id}', '${loan.tgl_kembali_due}', '${loan.anggota_nama}', '${loan.biblio_judul}')" 
+                        class="text-xs px-2 py-1 rounded-md bg-blue-500 text-white hover:bg-blue-600 transition shadow-sm">
+                        <i class="fas fa-calendar-alt"></i> Edit Tgl
+                    </button>
+                </div>
+            </td>
+        `;
+        loanList.appendChild(row);
+    });
+}
+
+// --- LOGIKA MODAL CUSTOM DATE ---
+
+function tutupCustomDateModal() {
+    customDateModal.style.display = 'none';
+    btnSaveNewDueDate.disabled = false; 
+}
+
+function tampilkanCustomDateModal(loanId, currentDueDate, borrowerName, bookTitle) {
+    inputNewDueDate.value = currentDueDate;
+    inputNewDueDate.setAttribute('data-loan-id', loanId);
+    customDateLoanInfo.innerHTML = `Mengubah tanggal jatuh tempo untuk <span class="font-bold">${bookTitle}</span>, dipinjam oleh <span class="font-bold">${borrowerName}</span>.`;
+    customDateModal.style.display = 'flex';
+    setTimeout(() => inputNewDueDate.focus(), 100);
+}
+
+function simpanCustomDate() {
+    const loanId = inputNewDueDate.getAttribute('data-loan-id');
+    const newDueDate = inputNewDueDate.value;
+
+    if (!loanId || !newDueDate) {
+        showToast("Kesalahan. ID Pinjaman atau Tanggal Kembali tidak valid.", true);
+        return;
+    }
+    
+    btnSaveNewDueDate.disabled = true;
+
+    db.collection(PATH_TRANSAKSI).doc(loanId).update({
+        tgl_kembali_due: newDueDate,
+        tgl_diubah_manual: getDueDate(0) 
+    })
+    .then(() => {
+        showToast(`✅ Tgl kembali berhasil diubah: ${newDueDate}. Daftar akan diperbarui.`, false);
+        tutupCustomDateModal();
+    })
+    .catch(error => {
+        showToast(`❌ Gagal mengubah tgl kembali: ${error.message}`, true);
+        btnSaveNewDueDate.disabled = false;
+    });
+}
+
+// --- LOGIKA MODAL PENGEMBALIAN ---
+
+let currentLoanToReturn = null;
+
+function tutupReturnConfirmModal() {
+    returnConfirmModal.style.display = 'none';
+}
+
+function tampilkanKembalikanConfirmModal(loanId, fineAmount, daysLate, bookTitle) {
+    currentLoanToReturn = { loanId, fineAmount: parseInt(fineAmount), daysLate: parseInt(daysLate) };
+
+    returnBookTitle.textContent = bookTitle;
+
+    if (currentLoanToReturn.fineAmount > 0) {
+        returnFineInfo.classList.remove('hidden');
+        returnFineInfo.innerHTML = `⚠️ Terlambat ${currentLoanToReturn.daysLate} Hari.<br>Total Denda: <span class="font-extrabold">Rp ${currentLoanToReturn.fineAmount.toLocaleString('id-ID')}</span>.`;
+    } else {
+        returnFineInfo.classList.add('hidden');
+    }
+
+    returnConfirmModal.style.display = 'flex';
+    setTimeout(() => btnReturnConfirm.focus(), 100); 
+}
+
+function handleKembalikanConfirm() {
+    if (!currentLoanToReturn || !currentLoanToReturn.loanId) {
+        tutupReturnConfirmModal();
+        return;
+    }
+
+    const { loanId, fineAmount, daysLate } = currentLoanToReturn;
+
+    tutupReturnConfirmModal(); 
+
+    const updateData = {
+        status: 'Dikembalikan',
+        tgl_kembali_aktual: getDueDate(0),
+        denda_terlambat: fineAmount, 
+        hari_terlambat: daysLate     
+    };
+    
+    db.collection(PATH_TRANSAKSI).doc(loanId).update(updateData)
+    .then(() => {
+        showToast(`✅ Pengembalian Sukses! Denda: ${formatRupiah(fineAmount)}.`, false);
+    })
+    .catch(error => {
+        showToast(`❌ Gagal mengembalikan buku: ${error.message}`, true);
+    });
+}
+
+// --- LOGIKA MODAL PERPANJANGAN ---
+
+let currentLoanToRenew = null;
+
+function tutupRenewConfirmModal() {
+    renewConfirmModal.style.display = 'none';
+}
+
+function tampilkanPerpanjangConfirmModal(loanId, role, bookTitle) {
+    const durasi = loanDurationSettings[role];
+    
+    if (durasi === 0 || durasi === undefined) {
+        showToast(`Role (${role}) tidak memiliki durasi pinjaman valid untuk perpanjangan.`, true);
+        return;
+    }
+
+    const tglKembaliBaru = getDueDate(durasi); 
+    
+    currentLoanToRenew = { loanId, tglKembaliBaru };
+    
+    renewBookTitleTarget.textContent = bookTitle;
+    newDueDateDisplayTarget.textContent = tglKembaliBaru;
+    
+    renewConfirmModal.style.display = 'flex';
+    setTimeout(() => btnRenewConfirm.focus(), 100); 
+}
+
+function handlePerpanjangConfirm() {
+    if (!currentLoanToRenew || !currentLoanToRenew.loanId) {
+        tutupRenewConfirmModal();
+        return;
+    }
+
+    const { loanId, tglKembaliBaru } = currentLoanToRenew;
+
+    tutupRenewConfirmModal(); 
+
+    db.collection(PATH_TRANSAKSI).doc(loanId).update({
+        tgl_kembali_due: tglKembaliBaru,
+        perpanjangan_terakhir: getDueDate(0) 
+    })
+    .then(() => {
+        showToast(`✅ Perpanjangan Sukses! Tanggal kembali baru: ${tglKembaliBaru}.`, false);
+    })
+    .catch(error => {
+        showToast(`❌ Gagal memperpanjang buku: ${error.message}`, true);
+    });
+}
+
+
+// ======================================================================
+// INISIALISASI LISTENERS
+// ======================================================================
+
+function initializeListeners() {
+    
+    // 1. Ambil Pengaturan Pinjaman & Denda
+    db.collection('config').doc('loanSettings').get()
+        .then(doc => {
+            if (doc.exists) {
+                const settings = doc.data();
+                loanDurationSettings = { ...settings, 'Hanya Data': 0 };
+                dailyFineAmount = settings.denda_harian !== undefined ? settings.denda_harian : 1000;
+            } else {
+                 loanDurationSettings = { 'Hanya Data': 0 };
+                 dailyFineAmount = 1000;
+                 // Set default jika belum ada
+                 db.collection('config').doc('loanSettings').set({ denda_harian: 1000, 'Anggota': 7 }, { merge: true });
+            }
+        });
+
+    // 2. Ambil Data Pinjaman Aktif (Realtime)
+    db.collection(PATH_TRANSAKSI)
+      .where('status', '==', 'Dipinjam')
+      .onSnapshot(snap => {
+        activeLoanData = [];
+        snap.forEach(doc => {
+            activeLoanData.push({ id: doc.id, ...doc.data() });
+        });
+        renderLoanList(); 
+    }, error => {
+         console.error("Error mendengarkan transaksi aktif:", error);
+         showToast(`❌ Gagal koneksi data pinjaman: ${error.message}`, true);
+    });
+
+    // 3. Event Listeners Aksi
+    loanFilter.addEventListener('keyup', renderLoanList);
+    loanSort.addEventListener('change', renderLoanList);
+    btnReturnConfirm.addEventListener('click', handleKembalikanConfirm);
+    btnRenewConfirm.addEventListener('click', handlePerpanjangConfirm);
+    
+    // 4. Tutup modal saat klik di luar area
+    window.onclick = function(event) {
+        if (event.target == customDateModal) {
+            tutupCustomDateModal();
+        } else if (event.target == returnConfirmModal) {
+            tutupReturnConfirmModal();
+        } else if (event.target == renewConfirmModal) {
+            tutupRenewConfirmModal();
+        }
+    }
+}
+
+window.onload = initializeListeners;
+</script>
+</body>
+</html>

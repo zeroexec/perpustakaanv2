@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Pinjaman Terlambat</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <style>
+        /* --- TEMA WARNA CUSTOM --- */
+        :root {
+            /* Warna Khusus Terlambat */
+            --color-late-bg: #fee2e2; /* Red 100 */
+            --color-late-text: #dc2626; /* Red 600 */
+            --color-dark-text: #374151; /* Standard dark text */
+        }
+
+        /* Table Header Styles */
+        .table-header {
+            background-color: var(--color-late-bg);
+            color: var(--color-late-text);
+        }
+        
+        /* Baris yang Terlambat */
+        .loan-late-row {
+            background-color: #fff5f5; /* Lightest Red */
+        }
+
+        /* Input Focus Ring */
+        .input-focus-style:focus {
+             --tw-ring-color: #fca5a5; /* Red 300 */
+             border-color: #f87171; /* Red 400 */
+        }
+        
+        /* TOAST NOTIFICATION CONTAINER */
+        #toastContainer {
+            position: fixed;
+            bottom: 20px; 
+            right: 20px;
+            z-index: 110; 
+            display: flex;
+            flex-direction: column-reverse; 
+            gap: 10px;
+        }
+        .toast {
+            padding: 12px 20px; 
+            border-radius: 8px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); 
+            color: white;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+            font-size: 0.9rem; 
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        .toast-success { background-color: #10b981; }
+        .toast-error { background-color: #ef4444; } 
+    </style>
+</head>
+<body class="bg-gray-100 p-4 sm:p-8">
+<div class="container max-w-7xl mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-2xl">
+  
+    <div class="mb-6 border-b pb-4">
+        <h3 class="text-3xl font-extrabold text-red-600 uppercase tracking-tight">
+            <i class="fas fa-exclamation-triangle mr-2"></i> Laporan Pinjaman Terlambat
+        </h3>
+        <p id="totalLoansInfo" class="text-sm text-gray-500 mt-1">Memuat data...</p>
+    </div>
+
+    <div class="mb-6 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 items-center">
+        <input type="text" id="loanFilter" placeholder="Cari nama peminjam atau judul buku..." 
+            class="input-focus-style flex-grow p-3 border border-gray-300 rounded-lg text-base shadow-sm transition">
+        
+        <button onclick="copyTableToClipboard()" class="w-full sm:w-auto py-3 px-4 rounded-lg text-sm font-bold bg-gray-500 text-white hover:bg-gray-600 transition shadow-sm flex items-center justify-center">
+            <i class="fas fa-copy mr-2"></i> Salin Tabel
+        </button>
+    </div>
+
+    <div class="overflow-x-auto rounded-xl border border-red-300 shadow-xl">
+        <table class="min-w-full divide-y divide-red-200">
+            <thead class="table-header">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Peminjam</th>
+                    <th class="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider">Judul Buku</th>
+                    <th class="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider">Tanggal Due</th>
+                    <th class="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider">Hari Terlambat</th>
+                    <th class="px-6 py-3 text-center text-xs font-semibold uppercase tracking-wider">Total Denda</th>
+                </tr>
+            </thead>
+            <tbody id="loanList" class="bg-white divide-y divide-gray-100">
+                <tr>
+                    <td colspan="5" class="p-6 text-center text-gray-500">Mohon tunggu, memuat data pinjaman aktif...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div id="noDataMessage" class="p-6 text-center text-gray-500 hidden">
+        <i class="fas fa-check-circle text-4xl text-green-500 mb-2"></i>
+        <p class="text-lg font-semibold">Hebat! Tidak ada pinjaman yang terlambat saat ini.</p>
+        <p class="text-sm">Semua pinjaman aktif masih dalam masa tenggang.</p>
+    </div>
+
+</div>
+
+<div id="toastContainer"></div>
+
+<script>
+// 1. KONFIGURASI FIREBASE
+const firebaseConfig = {
+    apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
+    authDomain: "databuku-6385c.firebaseapp.com",
+    projectId: "databuku-6385c",
+};
+const app = firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// 2. PATH KOLEKSI
+const PATH_TRANSAKSI = "transaksi_pinjam"; 
+
+// 3. ELEMEN DOM
+const loanList = document.getElementById("loanList");
+const loanFilter = document.getElementById("loanFilter");
+const totalLoansInfo = document.getElementById("totalLoansInfo");
+const noDataMessage = document.getElementById("noDataMessage");
+const toastContainer = document.getElementById("toastContainer"); 
+
+// 4. DATA GLOBAL DAN STATUS
+let activeLoanData = []; 
+let dailyFineAmount = 1000; 
+
+// --- UTILITY & HELPER FUNCTIONS ---
+
+function showToast(message, isError = true) {
+    const toast = document.createElement('div');
+    toast.className = `toast ${isError ? 'toast-error' : 'toast-success'}`;
+    toast.textContent = message;
+    toastContainer.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10);
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => toast.remove());
+    }, 3000);
+}
+
+function getDueDate(days) {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return date.toISOString().split('T')[0]; 
+}
+
+function calculateLateFine(dueDate, finePerDay) {
+    const due = new Date(dueDate);
+    const today = new Date(getDueDate(0)); 
+    due.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    const diffTime = today - due;
+    let daysLate = 0;
+    if (diffTime > 0) {
+        daysLate = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
+    const fineAmount = daysLate * finePerDay;
+    return { daysLate, fineAmount };
+}
+
+function formatRupiah(number) {
+    return `Rp ${number.toLocaleString('id-ID')}`;
+}
+
+// --- FUNGSI BARU UNTUK MENYALIN TABEL ---
+async function copyTableToClipboard() {
+    const table = document.querySelector('.min-w-full');
+    const tbody = document.getElementById('loanList');
+    if (!table || !tbody) {
+        showToast("Tabel tidak ditemukan.", true);
+        return;
+    }
+
+    let csv = [];
+    // 1. Ambil Header
+    const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.innerText.trim());
+    csv.push(headers.join('\t')); // Gunakan Tab (\t) sebagai pemisah untuk kemudahan tempel di Spreadsheet
+
+    // 2. Ambil Baris Data
+    const rows = tbody.querySelectorAll('tr');
+    let dataRowCount = 0;
+    
+    rows.forEach(row => {
+        // Lewati baris "tidak ada data" atau "memuat data"
+        if (row.querySelector('td[colspan="5"]')) return; 
+
+        dataRowCount++;
+        const rowData = Array.from(row.querySelectorAll('td')).map(td => {
+            let text = td.innerText.trim();
+            // Membersihkan format Rupiah dan kata 'Hari' agar hanya tersisa angka untuk laporan yang bersih
+            text = text.replace(/Rp\s/g, '').replace(/\./g, '').replace(/ Hari/g, ''); 
+            return text;
+        });
+        csv.push(rowData.join('\t'));
+    });
+
+    if (dataRowCount === 0) {
+        showToast("Tidak ada data pinjaman terlambat yang terfilter untuk disalin.", true);
+        return;
+    }
+
+    const csvString = csv.join('\n');
+
+    // 3. Salin ke Clipboard
+    try {
+        await navigator.clipboard.writeText(csvString);
+        showToast(`✅ ${dataRowCount} baris data berhasil disalin ke clipboard! (Siap tempel di Excel/Sheets)`, false);
+    } catch (err) {
+        console.error('Gagal menyalin:', err);
+        showToast("❌ Gagal menyalin data. Pastikan browser Anda mengizinkan akses clipboard.", true);
+    }
+}
+// ------------------------------------------
+
+// --- RENDERING LOGIC (LAPORAN) ---
+
+function renderLoanList() {
+    loanList.innerHTML = '';
+    
+    // 1. Hitung Denda dan Filter Terlambat
+    const lateLoans = activeLoanData.map(loan => {
+        const { daysLate, fineAmount } = calculateLateFine(loan.tgl_kembali_due, dailyFineAmount); 
+        return { ...loan, daysLate, fineAmount };
+    }).filter(loan => loan.daysLate > 0); 
+
+    // 2. Filter Search Query
+    const query = loanFilter.value.toLowerCase().trim();
+    const filteredLoans = lateLoans.filter(loan => {
+        const searchableText = `${loan.anggota_nama} ${loan.biblio_judul}`.toLowerCase();
+        return searchableText.includes(query);
+    });
+
+    // 3. Sort (Default: Paling lama terlambat/Tgl Due paling kecil)
+    filteredLoans.sort((a, b) => {
+        return new Date(a.tgl_kembali_due) - new Date(b.tgl_kembali_due); 
+    });
+
+    // 4. Update Info
+    const totalFine = filteredLoans.reduce((sum, loan) => sum + loan.fineAmount, 0);
+    totalLoansInfo.textContent = `Total Pinjaman Terlambat: ${filteredLoans.length} dokumen. Total Denda Terkumpul: ${formatRupiah(totalFine)}.`;
+    
+    if (filteredLoans.length === 0) {
+        // Pesan jika tidak ada data atau data terfilter habis
+        const message = query ? 'Tidak ada pinjaman terlambat yang cocok dengan filter.' : 'Mohon tunggu, memuat data pinjaman aktif...';
+        loanList.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-gray-500">${message}</td></tr>`;
+        
+        if (!query && activeLoanData.length > 0) {
+             // Jika semua data aktif sudah terfilter (tidak ada yang terlambat)
+             noDataMessage.classList.remove('hidden'); 
+        } else {
+             noDataMessage.classList.add('hidden');
+        }
+        return;
+    }
+
+    noDataMessage.classList.add('hidden');
+
+    // 5. Render Rows
+    filteredLoans.forEach(loan => {
+        
+        const row = document.createElement('tr');
+        row.className = 'loan-late-row hover:bg-red-50 transition duration-150';
+        row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">
+                <p class="text-sm font-semibold text-dark-text">${loan.anggota_nama}</p>
+            </td>
+            <td class="px-6 py-4 max-w-xs truncate">
+                <p class="text-sm font-medium text-red-700">${loan.biblio_judul}</p>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-center">
+                <span class="text-sm font-bold text-red-600">${loan.tgl_kembali_due}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-center">
+                <p class="text-base font-extrabold text-red-600">${loan.daysLate} Hari</p>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-center">
+                <p class="text-base font-extrabold text-red-700">${formatRupiah(loan.fineAmount)}</p>
+            </td>
+        `;
+        loanList.appendChild(row);
+    });
+}
+
+
+// ======================================================================
+// INISIALISASI LISTENERS
+// ======================================================================
+
+function initializeListeners() {
+    
+    // 1. Ambil Pengaturan Denda
+    db.collection('config').doc('loanSettings').get()
+        .then(doc => {
+            if (doc.exists) {
+                const settings = doc.data();
+                dailyFineAmount = settings.denda_harian !== undefined ? settings.denda_harian : 1000;
+            } else {
+                 dailyFineAmount = 1000;
+            }
+        });
+
+    // 2. Ambil Data Pinjaman Aktif (Realtime)
+    db.collection(PATH_TRANSAKSI)
+      .where('status', '==', 'Dipinjam')
+      .onSnapshot(snap => {
+        activeLoanData = [];
+        snap.forEach(doc => {
+            activeLoanData.push({ id: doc.id, ...doc.data() });
+        });
+        renderLoanList(); 
+    }, error => {
+         console.error("Error mendengarkan transaksi aktif:", error);
+         showToast(`❌ Gagal koneksi data pinjaman: ${error.message}`, true);
+    });
+
+    // 3. Event Listener Filter
+    loanFilter.addEventListener('keyup', renderLoanList);
+}
+
+window.onload = initializeListeners;
+</script>
+</body>
+</html>

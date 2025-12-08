@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manajemen Anggota</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        /* --- TEMA WARNA CUSTOM (Gradasi Hijau-Biru) --- */
+        :root {
+            --color-gradient-start: #00b894; 
+            --color-gradient-end: #1e90ff; 
+            --color-primary-light: #e0f7fa; 
+            --color-primary-border: #a7f3d0; 
+            --color-primary-text: #0e7490; 
+            --color-red-danger: #ef4444; 
+        }
+
+        .bg-primary-gradient { 
+            background-image: linear-gradient(to right, var(--color-gradient-start), var(--color-gradient-end)); 
+        }
+        .text-primary-gradient {
+            background-image: linear-gradient(to right, var(--color-gradient-start), var(--color-gradient-end));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent; 
+            display: inline-block;
+        }
+        .bg-primary-lighter { background-color: var(--color-primary-border); } 
+        .text-primary-medium { color: var(--color-primary-text); }
+        .hover\:opacity-90:hover { opacity: 0.9; }
+        
+        /* NEW: Red Gradient for Danger Actions (Hapus) */
+        .bg-danger-gradient {
+            background-image: linear-gradient(to right, #dc2626, #b91c1c); /* Red-Darker Red */
+        }
+        .bg-danger-gradient:hover {
+            opacity: 0.9;
+        }
+        
+        /* Popup manual */
+        .popup-overlay {
+          display:none;
+          position:fixed;
+          top:0;left:0;width:100%;height:100%;
+          background:rgba(0,0,0,0.6);
+          justify-content:center;
+          align-items:center;
+          z-index: 50; 
+          padding: 10px; 
+        }
+        
+        .popup {
+          max-height: 90vh; 
+          overflow-y: auto; 
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-4 sm:p-6">
+<div class="container max-w-6xl mx-auto bg-white p-6 rounded-xl">
+  
+  <div class="mb-6 flex justify-between items-center pb-4">
+      <h3 class="text-xl font-bold text-primary-gradient uppercase">DAFTAR ANGGOTA</h3>
+      
+      <div class="relative">
+          <button id="menuDropdownButton" onclick="toggleDropdown()" class="p-2 rounded-full text-gray-700 hover:bg-gray-100 transition duration-150 focus:outline-none focus:ring-2 focus:ring-primary-medium">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+              </svg>
+          </button>
+          
+          <div id="actionDropdown" class="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 hidden z-10 origin-top-right">
+              <div class="py-1" role="menu" aria-orientation="vertical" aria-labelledby="menuDropdownButton">
+                  <a href="#" onclick="bukaTambah(); tutupDropdown(event);" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-primary-medium" role="menuitem">
+                      Tambah Anggota
+                  </a>
+                  <a href="#" onclick="bukaImport(); tutupDropdown(event);" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-primary-medium" role="menuitem">
+                      Impor Excel
+                  </a>
+                  <div class="border-t border-gray-100 my-1"></div>
+                  <a href="#" onclick="bukaPengaturanPinjaman(); tutupDropdown(event);" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-primary-medium" role="menuitem">
+                      Atur Peminjaman
+                  </a>
+              </div>
+          </div>
+      </div>
+  </div>
+  
+  <div class="mb-6">
+    <h3 class="text-xl font-bold mb-3 text-primary-gradient uppercase">PENCARIAN</h3>
+    <input type="text" id="inputPencarian" placeholder="Cari ID, Nama, Institusi, Kamar Santri, Alamat, atau Role..." class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-medium focus:border-primary-medium">
+  </div>
+
+  <div id="dataAnggota" class="space-y-3">
+    <p class="text-gray-500 py-4 text-center">Memuat data...</p>
+  </div>
+
+  <div id="paginationContainer" class="mt-4 flex justify-center items-center space-x-2">
+    </div>
+
+  <div class="mt-6 text-right">
+    <button class="py-2 px-4 rounded-lg text-sm font-semibold bg-danger-gradient text-white hover:opacity-90 transition duration-150" onclick="bukaHapusSemua()">HAPUS SEMUA DATA</button>
+  </div>
+</div>
+
+<div class="popup-overlay" id="popupTambah">
+  <div class="popup bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg">
+    <h3 class="text-xl font-bold mb-4 text-primary-gradient uppercase">TAMBAH ANGGOTA BARU</h3>
+    <form id="formTambah">
+        
+        <label class="text-xs text-gray-500 block mt-2">ID Anggota (NIS):</label>
+        <input type="text" id="nis_tambah" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+        
+        <label class="text-xs text-gray-500 block">Nama Lengkap:</label>
+        <input type="text" id="keanggotaan_tambah" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+        
+        <label class="text-xs text-gray-500 block">Tanggal Lahir:</label>
+        <input type="date" id="tglLahir_tambah" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+        
+        <label class="text-xs text-gray-500 block">Anggota Sejak (Otomatis Hari Ini):</label>
+        <input type="date" id="anggotaSejak_tambah" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+        
+        <label class="text-xs text-gray-500 block">Tanggal Registrasi (Otomatis Hari Ini):</label>
+        <input type="date" id="tglRegistrasi_tambah" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+
+        <label class="text-xs text-gray-500 block">Institusi/Jenjang:</label>
+        <input type="text" id="institusi_tambah" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+        
+        <label class="text-xs text-gray-500 block">Alamat Lengkap:</label>
+        <textarea id="alamat_tambah" rows="2" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"></textarea><br>
+
+        <label class="text-xs text-gray-500 block">Kamar Santri:</label>
+        <input type="text" id="kamarSantri_tambah" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-4 focus:ring-2 focus:ring-primary-medium"><br>
+
+        <button type="submit" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-primary-gradient text-white hover:opacity-90 transition duration-150 mb-2">SIMPAN ANGGOTA</button>
+        <button type="button" onclick="tutupPopup('popupTambah')" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-gray-300 text-gray-800 hover:bg-gray-400 transition duration-150">BATAL</button>
+    </form>
+  </div>
+</div>
+
+<div class="popup-overlay" id="popupEdit">
+  <div class="popup bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
+    <h3 class="text-xl font-bold mb-4 text-primary-medium uppercase">EDIT ANGGOTA</h3>
+    
+    <label class="text-xs text-gray-500 block mt-2">ID Anggota (NIS):</label>
+    <input type="text" id="editNIS" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+
+    <label class="text-xs text-gray-500 block">Nama Anggota:</label>
+    <input type="text" id="editKeanggotaan" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+    
+    <label class="text-xs text-gray-500 block">Tanggal Lahir:</label>
+    <input type="date" id="editTglLahir" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+    <label class="text-xs text-gray-500 block">Anggota Sejak:</label>
+    <input type="date" id="editAnggotaSejak" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+    <label class="text-xs text-gray-500 block">Tanggal Registrasi:</label>
+    <input type="date" id="editTglRegistrasi" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+    
+    <label class="text-xs text-gray-500 block">Institusi/Jenjang:</label>
+    <input type="text" id="editInstitusi" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+    
+    <label class="text-xs text-gray-500 block">Alamat Lengkap:</label>
+    <textarea id="editAlamat" rows="2" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"></textarea><br>
+    
+    <label class="text-xs text-gray-500 block">Kamar Santri:</label>
+    <input type="text" id="editKamarSantri" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-4 focus:ring-2 focus:ring-primary-medium"><br>
+    
+    <label class="text-xs text-gray-500 block">Role/Label Anggota:</label>
+    <select id="editRole" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-4 focus:ring-2 focus:ring-primary-medium">
+        <option value="Hanya Data">Hanya Data</option>
+        <option value="Anggota">Anggota</option>
+        <option value="Pustakawan">Pustakawan</option>
+        <option value="Khusus">Khusus</option>
+    </select>
+    
+    <button id="btnSimpanEdit" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-primary-gradient text-white hover:opacity-90 transition duration-150 mb-2">SIMPAN PERUBAHAN</button>
+    <button onclick="tutupPopup('popupEdit')" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-gray-300 text-gray-800 hover:bg-gray-400 transition duration-150">BATAL</button>
+  </div>
+</div>
+
+<div class="popup-overlay" id="popupImport">
+  <div class="popup bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg">
+    <h3 class="text-xl font-bold mb-4 text-primary-medium uppercase">IMPORT DATA EXCEL</h3>
+    <p class="text-sm text-gray-700 mb-4">Pastikan file Excel (.xlsx) Anda memiliki header kolom. Hanya **NIS** dan **Keanggotaan** yang wajib diisi. Data akan otomatis diberi Role **Hanya Data**.</p>
+    
+    <div class="p-3 bg-gray-100 rounded-lg border border-gray-200 mb-4 font-mono text-sm overflow-x-auto">
+        **NIS** | **Keanggotaan** | TglLahir | AnggotaSejak | TglRegistrasi | Institusi | Alamat | KamarSantri
+    </div>
+    
+    <label class="text-xs text-gray-500 block mb-2">Pilih File Excel (.xlsx):</label>
+    <input type="file" id="uploadExcel" accept=".xlsx,.xls" class="block w-full text-sm text-gray-500 file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-light file:text-primary-medium hover:file:bg-primary-lighter">
+    
+    <button type="button" onclick="tutupPopup('popupImport')" class="w-full py-2 px-4 mt-4 rounded-lg text-sm font-semibold bg-gray-300 text-gray-800 hover:bg-gray-400 transition duration-150">BATAL</button>
+  </div>
+</div>
+
+<div class="popup-overlay" id="popupPengaturanPinjaman">
+  <div class="popup bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm">
+    <h3 class="text-xl font-bold mb-4 text-primary-gradient uppercase">Pengaturan Durasi Pinjaman</h3>
+    <p class="text-sm text-gray-700 mb-4">Tentukan batas hari pinjaman (biarkan kosong jika tidak ada batasan awal). Role "Hanya Data" **tidak boleh** meminjam.</p>
+    
+    <form id="formPengaturanPinjaman">
+        <label class="text-xs text-gray-500 block mt-2">Durasi Pinjaman (Hari) - Anggota:</label>
+        <input type="number" id="durasiAnggota" min="1" placeholder="Hari (Contoh: 7)" class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+        
+        <label class="text-xs text-gray-500 block">Durasi Pinjaman (Hari) - Pustakawan:</label>
+        <input type="number" id="durasiPustakawan" min="1" placeholder="Hari (Contoh: 10)" class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-primary-medium"><br>
+        
+        <label class="text-xs text-gray-500 block">Durasi Pinjaman (Hari) - Khusus:</label>
+        <input type="number" id="durasiKhusus" min="1" placeholder="Hari (Contoh: 14)" class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-4 focus:ring-2 focus:ring-primary-medium"><br>
+        
+        <button type="submit" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-primary-gradient text-white hover:opacity-90 transition duration-150 mb-2">SIMPAN PENGATURAN</button>
+        <button type="button" onclick="tutupPopup('popupPengaturanPinjaman')" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-gray-300 text-gray-800 hover:bg-gray-400 transition duration-150">BATAL</button>
+    </form>
+  </div>
+</div>
+
+<div class="popup-overlay" id="popupUbahRole">
+  <div class="popup bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs text-center">
+    <h3 class="text-xl font-bold mb-3 text-primary-medium uppercase">Ubah Role Anggota</h3>
+    <p class="mb-4 text-gray-700">Tetapkan role baru untuk anggota <b id="ubahRoleNama"></b> (<span id="ubahRoleNIS"></span>).</p>
+    
+    <label class="text-xs text-gray-500 block mt-2 mb-1">Role Baru:</label>
+    <select id="selectRoleBaru" required class="w-full p-2 border border-gray-300 rounded-lg text-sm mb-4 focus:ring-2 focus:ring-primary-medium">
+        <option value="Hanya Data">Hanya Data</option>
+        <option value="Anggota">Anggota</option>
+        <option value="Pustakawan">Pustakawan</option>
+        <option value="Khusus">Khusus</option>
+    </select>
+    
+    <button id="btnUbahRoleConfirm" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-primary-gradient text-white hover:opacity-90 transition duration-150 mb-2" onclick="ubahRoleConfirm()">UBAH (Enter)</button>
+    <button onclick="tutupPopup('popupUbahRole')" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-gray-300 text-gray-800 hover:bg-gray-400 transition duration-150">BATAL (Esc)</button>
+  </div>
+</div>
+
+<div class="popup-overlay" id="popupHapus">
+  <div class="popup bg-white p-6 rounded-xl shadow-2xl w-full max-w-xs text-center">
+    <h3 class="text-xl font-bold mb-3 text-red-500 uppercase">KONFIRMASI HAPUS</h3>
+    <p class="mb-4 text-gray-700">Apakah kamu yakin ingin menghapus anggota ini?</p>
+    <button id="btnHapusConfirm" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-danger-gradient text-white hover:opacity-90 transition duration-150 mb-2">HAPUS</button>
+    <button onclick="tutupPopup('popupHapus')" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-gray-300 text-gray-800 hover:bg-gray-400 transition duration-150">BATAL</button>
+  </div>
+</div>
+
+<div class="popup-overlay" id="popupHapusSemua">
+  <div class="popup bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm text-center">
+    <h3 class="text-xl font-bold mb-3 text-red-500 uppercase">KONFIRMASI HAPUS SEMUA</h3>
+    <p class="mb-4 text-gray-700">⚠️ Untuk melanjutkan penghapusan <b>SEMUA data anggota</b>, ketik sandi konfirmasi di bawah ini:</p>
+    <input type="text" id="hapusSemuaSandi" placeholder="Ketik Sandi Konfirmasi" class="w-full p-2 border border-red-500 rounded-lg text-sm mb-4 text-center focus:ring-2 focus:ring-red-600">
+    <button id="btnHapusSemuaConfirm" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-danger-gradient text-white hover:opacity-90 transition duration-150 mb-2">HAPUS SEMUA</button>
+    <button onclick="tutupPopup('popupHapusSemua')" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-gray-300 text-gray-800 hover:bg-gray-400 transition duration-150">BATAL</button>
+  </div>
+</div>
+
+<script>
+// 1. KONFIGURASI FIREBASE ANDA
+const firebaseConfig = {
+    apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
+    authDomain: "databuku-6385c.firebaseapp.com",
+    databaseURL: "https://databuku-6385c-default-rtdb.firebaseio.com",
+    projectId: "databuku-6385c",
+    storageBucket: "databuku-6385c.firebasestorage.app",
+    messagingSenderId: "844439345466",
+    appId: "1:844439345466:web:fb90dfc8337a96f0621803"
+};
+
+// 2. INISIALISASI MENGGUNAKAN FIRESTORE
+const app = firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const DATA_PATH_AKTIF = "keanggotaan_v2"; 
+const CONFIG_PATH = "config"; 
+const LOAN_SETTINGS_DOC = "loanSettings"; // Dokumen untuk menyimpan pengaturan durasi pinjaman
+
+let lastSnapshot = null;
+const dataAnggotaContainer = document.getElementById("dataAnggota"); 
+const inputPencarian = document.getElementById("inputPencarian");
+
+const DATA_LIMIT = 10; // BARU: Batas data per halaman
+let currentPage = 1;   // BARU: Halaman saat ini
+let filteredAnggotaList = []; // BARU: List anggota yang sudah difilter/dicari
+
+// Global variabel untuk menyimpan pengaturan durasi pinjaman
+let loanDurationSettings = {
+    'Hanya Data': 0, // FIXED: Tidak boleh pinjam
+    'Anggota': null, 
+    'Pustakawan': null,
+    'Khusus': null
+};
+
+function formatDate(dateString) {
+    if (!dateString || dateString.length < 10) return '-';
+    const parts = dateString.split('-');
+    if (parts.length === 3) {
+        return `${parts[2]}-${parts[1]}-${parts[0]}`; 
+    }
+    return dateString;
+}
+
+function getCurrentDate() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0'); 
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function getRoleBadge(role) {
+    let colorClass = 'bg-gray-100 text-gray-700';
+    if (role === 'Anggota') colorClass = 'bg-blue-100 text-blue-800';
+    else if (role === 'Pustakawan') colorClass = 'bg-green-100 text-green-800';
+    else if (role === 'Khusus') colorClass = 'bg-red-100 text-red-800';
+
+    return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClass}">${role}</span>`;
+}
+
+// ======================================================================
+// FUNGSI DROP DOWN MENU
+// ======================================================================
+
+function toggleDropdown() {
+    const dropdown = document.getElementById('actionDropdown');
+    dropdown.classList.toggle('hidden');
+}
+
+function tutupDropdown(e) {
+    if (e) e.preventDefault();
+    document.getElementById('actionDropdown').classList.add('hidden');
+}
+
+// Tutup dropdown saat klik di luar area
+document.addEventListener('click', function(event) {
+    const dropdown = document.getElementById('actionDropdown');
+    const button = document.getElementById('menuDropdownButton');
+    
+    if (dropdown && button) {
+        if (!button.contains(event.target) && !dropdown.contains(event.target)) {
+             dropdown.classList.add('hidden');
+        }
+    }
+});
+
+// ======================================================================
+// FUNGSI PAGINASI (BARU)
+// ======================================================================
+
+function renderPagination(totalAnggota, totalPages) {
+    const container = document.getElementById("paginationContainer");
+    container.innerHTML = "";
+    
+    if (totalPages <= 1) {
+        // Tampilkan info total data saja jika hanya 1 halaman
+        container.innerHTML = `<span class="text-sm text-gray-600">Total: ${totalAnggota} Anggota</span>`;
+        return;
+    }
+
+    // Tombol Sebelumnya
+    const prevButton = `<button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} class="px-3 py-1 text-sm font-medium rounded-lg text-white ${currentPage === 1 ? 'bg-gray-300' : 'bg-primary-gradient hover:opacity-90'} transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed">Sebelumnya</button>`;
+    
+    // Tombol Selanjutnya
+    const nextButton = `<button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} class="px-3 py-1 text-sm font-medium rounded-lg text-white ${currentPage === totalPages ? 'bg-gray-300' : 'bg-primary-gradient hover:opacity-90'} transition duration-150 disabled:opacity-50 disabled:cursor-not-allowed">Selanjutnya</button>`;
+    
+    let pageButtons = '';
+    
+    // Logic untuk menampilkan halaman di sekitar halaman saat ini (maksimal 5 tombol)
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, currentPage + 2);
+
+    if (currentPage <= 3) {
+        endPage = Math.min(totalPages, 5);
+    } else if (currentPage > totalPages - 3) {
+        startPage = Math.max(1, totalPages - 4);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+        const isActive = i === currentPage;
+        pageButtons += `<button onclick="goToPage(${i})" class="px-3 py-1 text-sm font-medium rounded-lg ${isActive ? 'bg-primary-gradient text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} transition duration-150">${i}</button>`;
+    }
+    
+    // Tambahkan indikator total data
+    const infoText = `<span class="text-sm text-gray-600 ml-4 hidden sm:inline">Total: ${totalAnggota} Anggota | Halaman ${currentPage} dari ${totalPages}</span>`;
+
+    container.innerHTML = `${prevButton} ${pageButtons} ${nextButton} ${infoText}`;
+}
+
+// Fungsi pindah halaman
+function goToPage(page) {
+    const totalPages = Math.ceil(filteredAnggotaList.length / DATA_LIMIT);
+    if (page < 1 || page > totalPages) {
+        return;
+    }
+    tampilkanData(lastSnapshot, inputPencarian.value, page);
+}
+
+// ======================================================================
+// FUNGSI LOAD PENGATURAN PINJAMAN
+// ======================================================================
+function loadLoanSettings() {
+    db.collection(CONFIG_PATH).doc(LOAN_SETTINGS_DOC).get()
+        .then(doc => {
+            if (doc.exists) {
+                const settings = doc.data();
+                loanDurationSettings = { ...loanDurationSettings, ...settings };
+                loanDurationSettings['Hanya Data'] = 0; 
+                console.log("Pengaturan Pinjaman dimuat:", loanDurationSettings);
+            } else {
+                console.log("Pengaturan Pinjaman belum ada di Firestore.");
+            }
+        }).catch(error => {
+            console.error("Gagal memuat pengaturan pinjaman:", error);
+        });
+}
+
+// Panggil saat inisialisasi
+loadLoanSettings(); 
+
+
+// ======================================================================
+// FUNGSI PENCARIAN & TAMPILAN (Kartu/List)
+// ======================================================================
+
+function tampilkanData(snapshot, kataKunci = "", page = 1) {
+  currentPage = page; // Set halaman saat ini
+  dataAnggotaContainer.innerHTML = "";
+  const kataKunciLower = kataKunci.toLowerCase().trim();
+  
+  // 1. FILTER DATA BERDASARKAN KATA KUNCI
+  filteredAnggotaList = []; 
+  snapshot.forEach(doc => {
+    const nis = doc.id; 
+    const d = doc.data();
+    
+    const institusi = d.institusi || d.jenjang || ''; 
+    const kamarSantri = d.kamarSantri || d.surel || d.blok || ''; 
+    const role = d.role || 'Hanya Data'; 
+    const teksData = `${nis} ${d.keanggotaan || ''} ${institusi} ${kamarSantri} ${d.alamat || ''} ${role}`.toLowerCase();
+    
+    if (kataKunciLower === "" || teksData.includes(kataKunciLower)) {
+      // Simpan data mentah yang sudah difilter
+      filteredAnggotaList.push({ nis, ...d, role, institusi, kamarSantri }); 
+    }
+  });
+
+  const totalAnggota = filteredAnggotaList.length;
+  const totalPages = Math.ceil(totalAnggota / DATA_LIMIT);
+  
+  // Perbaiki halaman jika melebihi batas (misal: setelah penghapusan)
+  if (currentPage > totalPages && totalPages > 0) {
+      currentPage = totalPages;
+  } else if (totalPages === 0) {
+      currentPage = 1;
+  }
+  
+  // 2. SLICE DATA BERDASARKAN PAGINASI
+  const startIndex = (currentPage - 1) * DATA_LIMIT;
+  const endIndex = startIndex + DATA_LIMIT;
+  const anggotaToDisplay = filteredAnggotaList.slice(startIndex, endIndex);
+
+  // 3. RENDER DATA YANG DITAMPILKAN
+  if (anggotaToDisplay.length === 0 && totalAnggota > 0) {
+     dataAnggotaContainer.innerHTML = `<p class="text-gray-500 py-4 text-center">Tidak ada anggota pada halaman ini.</p>`;
+  } else if (totalAnggota === 0) {
+     dataAnggotaContainer.innerHTML = `<p class="text-gray-500 py-4 text-center">Tidak ada anggota ditemukan.</p>`;
+  } else {
+      anggotaToDisplay.forEach(d => {
+        const nis = d.nis;
+        const role = d.role;
+        const keanggotaan = d.keanggotaan || '-';
+        const institusi = d.institusi; 
+        const kamarSantri = d.kamarSantri; 
+
+        const dataString = encodeURIComponent(JSON.stringify({
+            keanggotaan: keanggotaan,
+            institusi: institusi,
+            kamarSantri: kamarSantri,
+            tglLahir: d.tglLahir || '',
+            anggotaSejak: d.anggotaSejak || '',
+            tglRegistrasi: d.tglRegistrasi || '',
+            alamat: d.alamat || '',
+            role: role 
+        }));
+
+        // Logika Durasi Pinjaman Tampilan
+        const durasiPinjam = loanDurationSettings[role];
+        let durasiTeks;
+        if (role === 'Hanya Data' || durasiPinjam === 0) {
+            durasiTeks = '<span class="text-red-600">Tidak Boleh Pinjam</span>';
+        } else if (durasiPinjam === null || durasiPinjam === undefined) {
+            durasiTeks = '<span class="text-yellow-600">Belum Diatur</span>';
+        } else {
+            durasiTeks = `${durasiPinjam} Hari`;
+        }
+        
+        // NEW: Tombol Role (Ikon Gear) - Memanggil bukaUbahRole
+        const roleBtn = `<button class="py-1 px-2 rounded-lg text-xs font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 transition duration-150 mr-1" title="Ubah Role Anggota" onclick="bukaUbahRole('${nis}', '${keanggotaan.replace(/'/g, "\\'")}', '${role}')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M11.49 3.17c-.38-.15-.78-.27-.78-.27s-.83.18-1.55.61a5.69 5.69 0 00-1.28.94c-.58.58-.93 1.25-1.12 1.93-.19.67-.18 1.4-.18 1.4V10c0 .65-.12 1.25-.34 1.77-.22.52-.53.94-.94 1.28l-.05.04c-.45.38-.83.84-1.07 1.38-.24.54-.26 1.14-.07 1.72.19.58.62 1.08 1.15 1.32.53.24 1.13.23 1.67-.02l.04-.01c.42-.19.79-.44 1.1-.73l.04-.04c.34-.33.74-.63 1.16-.86.42-.23.89-.35 1.39-.35h.01c.65 0 1.25.12 1.77.34.52.22.94.53 1.28.94l.04.05c.38.45.84.83 1.38 1.07.54.24 1.14.26 1.72.07.58-.19 1.08-.62 1.15-1.32.24-.53.23-1.13-.02-1.67l-.01-.04c-.19-.42-.44-.79-.73-1.1l-.04-.04c-.33-.34-.63-.74-.86-1.16-.23-.42-.35-.89-.35-1.39v-.01c0-.65.12-1.25.34-1.77.22-.52.53-.94.94-1.28l.05-.04c.45-.38.83-.84 1.07-1.38.24-.54.26-1.14.07-1.72-.19-.58-.62-1.08-1.15-1.32-.53-.24-1.13-.23-1.67.02l-.04.01c-.42.19-.79.44-1.1.73l-.04.04c-.34.33-.74.63-1.16.86-.42.23-.89.35-1.39.35h-.01c-.65 0-1.25-.12-1.77-.34-.52-.22-.94-.53-1.28-.94zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+            </svg>
+        </button>`;
+        // Tombol Edit (gradasi hijau-biru) dan Hapus (gradasi merah)
+        const editBtn = `<button class="py-1 px-3 rounded-lg text-xs font-semibold bg-primary-gradient text-white hover:opacity-90 transition duration-150 mr-1" onclick="bukaEdit('${nis}','${dataString}')">Edit</button>`;
+        const deleteBtn = `<button class="py-1 px-3 rounded-lg text-xs font-semibold bg-danger-gradient text-white hover:opacity-90 transition duration-150" onclick="bukaHapus('${nis}')">Hapus</button>`;
+        
+        
+        const card = document.createElement("div");
+        // Hapus border, shadow, dan rounded-lg untuk tampilan minimalis
+        card.className = "p-3 bg-white hover:bg-gray-50 transition duration-150";
+
+        card.innerHTML = `
+            <div class="flex justify-between items-start mb-2">
+                <div>
+                    <div class="font-bold text-lg text-primary-gradient truncate" title="${keanggotaan}">
+                        ${keanggotaan} 
+                    </div>
+                    <div class="font-mono text-xs text-gray-700 flex items-center mt-0.5">
+                        ID Anggota: ${nis} 
+                        <span class="ml-3">${getRoleBadge(role)}</span>
+                    </div>
+                </div>
+                <div class="flex space-x-1 flex-shrink-0">
+                    ${roleBtn} ${editBtn} ${deleteBtn}
+                </div>
+            </div>
+            <div class="text-sm pt-2">
+                <p class="text-xs text-gray-800 mb-1">
+                    <strong>Institusi:</strong> ${institusi || '-'} | 
+                    <strong>Kamar Santri:</strong> ${kamarSantri || '-'}
+                </p>
+                <p class="text-xs text-gray-500 mb-1">
+                    Lahir: ${formatDate(d.tglLahir)} | 
+                    Sejak: ${formatDate(d.anggotaSejak)} | 
+                    Reg: ${formatDate(d.tglRegistrasi)}
+                </p>
+                <p class="text-xs text-gray-500 mb-1">
+                    <strong>Durasi Pinjam:</strong> <span class="font-semibold">${durasiTeks}</span>
+                </p>
+                <p class="text-xs text-gray-500 truncate"><strong>Alamat:</strong> ${d.alamat || '-'}</p>
+            </div>
+        `;
+        dataAnggotaContainer.appendChild(card);
+      });
+  }
+  
+  // 4. RENDER PAGINATION
+  renderPagination(totalAnggota, totalPages);
+}
+
+// Firestore Listener
+db.collection(DATA_PATH_AKTIF).onSnapshot(snap => {
+  lastSnapshot = snap;
+  // Panggil tampilkanData dengan halaman saat ini agar tetap di halaman yang sama
+  tampilkanData(lastSnapshot, inputPencarian.value, currentPage); 
+}, error => {
+    console.error("Error mendengarkan data Firestore:", error);
+    alert("Gagal memuat data dari Firestore: " + error.message);
+});
+
+// Event Listener Pencarian (Reset ke halaman 1 saat pencarian baru)
+inputPencarian.addEventListener("keyup", () => {
+  if (lastSnapshot) {
+    tampilkanData(lastSnapshot, inputPencarian.value, 1); // Reset ke halaman 1
+  }
+});
+
+// ======================================================================
+// FUNGSI CRUD & MODAL (Tidak Berubah Signifikan)
+// ======================================================================
+
+// Popup kontrol 
+function tutupPopup(id){document.getElementById(id).style.display="none";}
+let editNIS=null;
+let hapusNIS=null;
+let ubahRoleNIS=null; // NEW: Global variable untuk NIS yang akan diubah role-nya
+
+function bukaTambah() {
+    document.getElementById("formTambah").reset();
+    const today = getCurrentDate();
+    document.getElementById("anggotaSejak_tambah").value = today;
+    document.getElementById("tglRegistrasi_tambah").value = today;
+    document.getElementById("popupTambah").style.display="flex";
+    document.getElementById("nis_tambah").focus();
+}
+
+function bukaImport(){
+    document.getElementById("popupImport").style.display="flex";
+}
+
+// Buka Pengaturan Pinjaman
+function bukaPengaturanPinjaman() {
+    document.getElementById("durasiAnggota").value = loanDurationSettings['Anggota'] || '';
+    document.getElementById("durasiPustakawan").value = loanDurationSettings['Pustakawan'] || '';
+    document.getElementById("durasiKhusus").value = loanDurationSettings['Khusus'] || '';
+
+    document.getElementById("popupPengaturanPinjaman").style.display = "flex";
+    document.getElementById("durasiAnggota").focus();
+}
+
+// NEW: Fungsi Modal Ubah Role
+function bukaUbahRole(nis, keanggotaan, currentRole){
+    ubahRoleNIS = nis;
+    
+    document.getElementById("ubahRoleNama").textContent = keanggotaan;
+    document.getElementById("ubahRoleNIS").textContent = nis;
+    document.getElementById("selectRoleBaru").value = currentRole;
+
+    document.getElementById("popupUbahRole").style.display="flex";
+    
+    // Fokuskan select element agar Enter bisa di-trigger
+    setTimeout(() => document.getElementById("selectRoleBaru").focus(), 100); 
+}
+
+// NEW: Fungsi Konfirmasi Ubah Role (Dipanggil saat klik/Enter)
+function ubahRoleConfirm() {
+    if (!ubahRoleNIS) return;
+    
+    const newRole = document.getElementById("selectRoleBaru").value;
+    
+    db.collection(DATA_PATH_AKTIF).doc(ubahRoleNIS).update({
+        role: newRole
+    }).then(() => {
+        tutupPopup("popupUbahRole");
+        // Firestore listener akan otomatis me-refresh tampilan
+    }).catch(error => {
+        alert("Gagal mengubah role anggota: " + error.message);
+        tutupPopup("popupUbahRole");
+    });
+}
+
+
+// Listener untuk menyimpan Pengaturan Pinjaman
+document.getElementById("formPengaturanPinjaman").addEventListener("submit", e => {
+    e.preventDefault();
+    
+    const durasiAnggota = parseInt(document.getElementById("durasiAnggota").value) || null;
+    const durasiPustakawan = parseInt(document.getElementById("durasiPustakawan").value) || null;
+    const durasiKhusus = parseInt(document.getElementById("durasiKhusus").value) || null;
+    
+    if (durasiAnggota !== null && durasiAnggota < 1) {
+        alert("Durasi Anggota harus minimal 1 hari atau dikosongkan.");
+        return;
+    }
+    if (durasiPustakawan !== null && durasiPustakawan < 1) {
+        alert("Durasi Pustakawan harus minimal 1 hari atau dikosongkan.");
+        return;
+    }
+    if (durasiKhusus !== null && durasiKhusus < 1) {
+        alert("Durasi Khusus harus minimal 1 hari atau dikosongkan.");
+        return;
+    }
+    
+    const newSettings = {
+        'Anggota': durasiAnggota,
+        'Pustakawan': durasiPustakawan,
+        'Khusus': durasiKhusus
+    };
+
+    db.collection(CONFIG_PATH).doc(LOAN_SETTINGS_DOC).set(newSettings)
+        .then(() => {
+            loanDurationSettings = { ...loanDurationSettings, ...newSettings };
+            loanDurationSettings['Hanya Data'] = 0; 
+            tutupPopup("popupPengaturanPinjaman");
+            
+            if (lastSnapshot) {
+                tampilkanData(lastSnapshot, inputPencarian.value, currentPage);
+            }
+            alert("Pengaturan durasi pinjaman berhasil disimpan!");
+        }).catch(error => {
+            alert("Gagal menyimpan pengaturan: " + error.message);
+        });
+});
+
+// Listener Tambah Anggota
+document.getElementById("formTambah").addEventListener("submit", e=>{
+  e.preventDefault();
+  
+  const nis = document.getElementById("nis_tambah").value.trim();
+  const keanggotaan = document.getElementById("keanggotaan_tambah").value.trim();
+  const tglLahir = document.getElementById("tglLahir_tambah").value.trim(); 
+  const anggotaSejak = document.getElementById("anggotaSejak_tambah").value.trim(); 
+  const tglRegistrasi = document.getElementById("tglRegistrasi_tambah").value.trim();
+  const institusi = document.getElementById("institusi_tambah").value.trim();
+  const alamat = document.getElementById("alamat_tambah").value.trim(); 
+  const kamarSantri = document.getElementById("kamarSantri_tambah").value.trim(); 
+
+  db.collection(DATA_PATH_AKTIF).doc(nis).set({
+      keanggotaan: keanggotaan,
+      tglLahir: tglLahir,
+      anggotaSejak: anggotaSejak,
+      tglRegistrasi: tglRegistrasi,
+      institusi: institusi, 
+      alamat: alamat,
+      kamarSantri: kamarSantri,
+      role: "Hanya Data" // Set default role untuk data baru
+  }).then(() => {
+      tutupPopup("popupTambah");
+  }).catch(error => {
+      alert("Gagal menambah anggota: " + error.message);
+  });
+});
+
+// Upload Excel (Batch Create)
+document.getElementById("uploadExcel").addEventListener("change", e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = evt=>{
+    const data = new Uint8Array(evt.target.result);
+    const workbook = XLSX.read(data,{type:"array"});
+    const sheet = workbook.Sheets[workbook.SheetsNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+    
+    const batch = db.batch();
+    let count = 0;
+    const currentDate = getCurrentDate(); 
+
+    rows.forEach(r=>{
+      if(r.NIS && r.Keanggotaan) { 
+        const nis = String(r.NIS).trim();
+        const docRef = db.collection(DATA_PATH_AKTIF).doc(nis);
+        
+        const anggotaSejakValue = r.AnggotaSejak ? String(r.AnggotaSejak) : currentDate;
+        const tglRegistrasiValue = r.TglRegistrasi ? String(r.TglRegistrasi) : currentDate;
+        
+        batch.set(docRef, {
+            keanggotaan: r.Keanggotaan || '',
+            tglLahir: r.TglLahir || '', 
+            anggotaSejak: anggotaSejakValue, 
+            tglRegistrasi: tglRegistrasiValue, 
+            institusi: r.Institusi || '', 
+            alamat: r.Alamat || '',
+            kamarSantri: r.KamarSantri || r.Surel || r.Blok || '',
+            role: "Hanya Data" 
+        });
+        count++;
+      }
+    });
+    
+    tutupPopup("popupImport"); 
+
+    if(count > 0) {
+        batch.commit()
+            .then(() => alert(`${count} data anggota berhasil di-import ke Firestore!`))
+            .catch(error => alert("Gagal mengimport data: " + error.message));
+    } else {
+        alert("Tidak ada data valid ditemukan untuk di-import. Pastikan field wajib (NIS dan Keanggotaan) terisi.");
+    }
+    
+    e.target.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+
+function bukaEdit(nis, dataString){
+  editNIS=nis;
+  const d = JSON.parse(decodeURIComponent(dataString));
+
+  document.getElementById("editNIS").value = nis; 
+  document.getElementById("editKeanggotaan").value = d.keanggotaan;
+  
+  document.getElementById("editTglLahir").type = 'date';
+  document.getElementById("editAnggotaSejak").type = 'date';
+  document.getElementById("editTglRegistrasi").type = 'date';
+  
+  document.getElementById("editTglLahir").value = d.tglLahir; 
+  document.getElementById("editAnggotaSejak").value = d.anggotaSejak; 
+  document.getElementById("editTglRegistrasi").value = d.tglRegistrasi; 
+  
+  document.getElementById("editInstitusi").value = d.institusi; 
+  document.getElementById("editAlamat").value = d.alamat; 
+  document.getElementById("editKamarSantri").value = d.kamarSantri;
+  
+  document.getElementById("editRole").value = d.role || 'Hanya Data'; 
+
+  document.getElementById("popupEdit").style.display="flex";
+  document.getElementById("editNIS").focus(); 
+}
+
+function bukaHapus(nis){
+  hapusNIS=nis;
+  document.getElementById("popupHapus").style.display="flex";
+  document.getElementById("btnHapusConfirm").focus();
+}
+
+function bukaHapusSemua(){
+  document.getElementById("hapusSemuaSandi").value = ""; 
+  document.getElementById("popupHapusSemua").style.display="flex";
+  document.getElementById("hapusSemuaSandi").focus(); 
+}
+
+document.getElementById("btnSimpanEdit").addEventListener("click",()=>{
+  const oldNIS = editNIS;
+  const newNIS = document.getElementById("editNIS").value.trim();
+  const keanggotaan = document.getElementById("editKeanggotaan").value.trim();
+  const tglLahir = document.getElementById("editTglLahir").value.trim();
+  const anggotaSejak = document.getElementById("editAnggotaSejak").value.trim();
+  const tglRegistrasi = document.getElementById("editTglRegistrasi").value.trim();
+  const institusi = document.getElementById("editInstitusi").value.trim(); 
+  const alamat = document.getElementById("editAlamat").value.trim();
+  const kamarSantri = document.getElementById("editKamarSantri").value.trim();
+  const role = document.getElementById("editRole").value.trim(); 
+
+  if (!newNIS || !keanggotaan || !institusi || !alamat || !kamarSantri || !tglLahir || !anggotaSejak || !tglRegistrasi) {
+      alert("Semua field wajib diisi.");
+      return;
+  }
+  
+  const updatedData = {
+      keanggotaan: keanggotaan,
+      tglLahir: tglLahir,
+      anggotaSejak: anggotaSejak,
+      tglRegistrasi: tglRegistrasi,
+      institusi: institusi,
+      alamat: alamat,
+      kamarSantri: kamarSantri,
+      role: role 
+  };
+
+  if(newNIS === oldNIS) {
+      db.collection(DATA_PATH_AKTIF).doc(newNIS).update(updatedData)
+      .then(() => {
+          tutupPopup("popupEdit");
+      }).catch(error => {
+          alert("Gagal menyimpan perubahan: " + error.message);
+      });
+  } else {
+      if (confirm(`Anda mengubah ID Anggota dari ${oldNIS} menjadi ${newNIS}. Lanjutkan?`)) {
+          db.collection(DATA_PATH_AKTIF).doc(newNIS).set(updatedData) 
+          .then(() => db.collection(DATA_PATH_AKTIF).doc(oldNIS).delete()) 
+          .then(() => {
+              tutupPopup("popupEdit");
+          }).catch(error => {
+              alert("Gagal mengubah ID atau menyimpan data: " + error.message);
+          });
+      }
+  }
+});
+
+document.getElementById("btnHapusConfirm").addEventListener("click",()=>{
+  if(hapusNIS){
+    db.collection(DATA_PATH_AKTIF).doc(hapusNIS).delete()
+    .then(() => {
+        tutupPopup("popupHapus");
+    }).catch(error => {
+        alert("Gagal menghapus anggota: " + error.message);
+    });
+  }
+});
+
+// Hapus semua (Batch Delete) - Cek Sandi Rahasia
+document.getElementById("btnHapusSemuaConfirm").addEventListener("click",()=>{
+  const sandi = document.getElementById("hapusSemuaSandi").value.trim();
+  
+  // Sandi Konfirmasi Rahasia
+  if (sandi !== "saya sadar") {
+      alert("Sandi konfirmasi salah. Harap ketik sandi yang benar untuk melanjutkan.");
+      return;
+  }
+  
+  db.collection(DATA_PATH_AKTIF).get()
+    .then(snapshot => {
+        if (snapshot.size === 0) {
+            alert("Tidak ada data untuk dihapus.");
+            tutupPopup("popupHapusSemua");
+            return;
+        }
+        
+        const batch = db.batch();
+        snapshot.docs.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        
+        return batch.commit();
+    })
+    .then(() => {
+        alert("Semua data anggota berhasil dihapus!");
+        tutupPopup("popupHapusSemua");
+    })
+    .catch(error => {
+        console.error("Error menghapus semua data:", error);
+        alert("Gagal menghapus semua data: " + error.message);
+    });
+});
+
+// MODIFIKASI: Menambahkan penanganan Enter dan Escape untuk popup baru
+document.addEventListener("keydown", e=>{
+  // Jika tombol Enter ditekan
+  if(e.key==="Enter"){
+    if(document.getElementById("popupTambah").style.display==="flex"){
+        document.getElementById("formTambah").dispatchEvent(new Event('submit'));
+    } else if(document.getElementById("popupEdit").style.display==="flex"){
+      document.getElementById("btnSimpanEdit").click();
+    } else if(document.getElementById("popupHapus").style.display==="flex"){
+      document.getElementById("btnHapusConfirm").click();
+    } 
+    // NEW: Role Change
+    else if(document.getElementById("popupUbahRole").style.display==="flex"){
+        e.preventDefault(); // Mencegah Enter default behavior
+        ubahRoleConfirm(); 
+    }
+    // Akses enter untuk Hapus Semua
+    else if(document.getElementById("popupHapusSemua").style.display==="flex" && document.getElementById("hapusSemuaSandi").value.trim() === "saya sadar"){
+      document.getElementById("btnHapusSemuaConfirm").click();
+    }
+  } 
+  // Jika tombol Escape ditekan
+  else if (e.key === 'Escape') {
+      if(document.getElementById("popupTambah").style.display==="flex"){
+        tutupPopup("popupTambah");
+      } else if(document.getElementById("popupEdit").style.display==="flex"){
+        tutupPopup("popupEdit");
+      } else if(document.getElementById("popupHapus").style.display==="flex"){
+        tutupPopup("popupHapus");
+      } else if(document.getElementById("popupHapusSemua").style.display==="flex"){
+        tutupPopup("popupHapusSemua");
+      } else if(document.getElementById("popupPengaturanPinjaman").style.display==="flex"){
+        tutupPopup("popupPengaturanPinjaman");
+      } 
+      // NEW: Role Change
+      else if(document.getElementById("popupUbahRole").style.display==="flex"){
+        tutupPopup('popupUbahRole');
+      }
+  }
+});
+</script>
+</body>
+</html>

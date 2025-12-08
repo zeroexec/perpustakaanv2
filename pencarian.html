@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Katalog Perpustakaan Publik</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        /* Gaya Kustom dan Animasi */
+        body {
+            background-color: #f3f4f6;
+        }
+        .hero-section {
+            background: linear-gradient(135deg, #0e7490 0%, #0891b2 100%);
+            color: white;
+        }
+        .book-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .book-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .modal-open {
+            overflow: hidden;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1;
+            border-radius: 4px;
+        }
+        
+        /* 1. ANIMASI FADE IN UNTUK DAFTAR BUKU */
+        @keyframes fadeInSlide {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        /* Kelas untuk item yang baru dimuat */
+        .animate-list-item {
+            animation: fadeInSlide 0.3s ease-out forwards;
+            opacity: 0; /* Mulai dari tersembunyi */
+        }
+        /* Kelas untuk item yang akan hilang (belum digunakan di JS, tapi baik untuk persiapan) */
+        @keyframes fadeOutSlide {
+            from {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+        }
+        .animate-list-item-out {
+            animation: fadeOutSlide 0.2s ease-in forwards;
+        }
+
+        /* 2. ANIMASI MODAL */
+        .modal-transition-bg {
+            transition: opacity 0.25s ease;
+        }
+        .modal-transition-content {
+            transition: transform 0.25s ease-out, opacity 0.25s ease;
+        }
+    </style>
+</head>
+<body class="text-gray-800 font-sans">
+
+    <div class="hero-section py-12 px-4 shadow-lg mb-8">
+        <div class="max-w-4xl mx-auto text-center space-y-6">
+            <h1 class="text-3xl md:text-5xl font-bold tracking-tight">Katalog Perpustakaan</h1>
+            <p class="text-cyan-100 text-lg">Temukan referensi, buku, dan koleksi ilmu pengetahuan kami.</p>
+            
+            <div class="relative max-w-2xl mx-auto mt-4">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                </div>
+                <input type="text" id="filterInput" 
+                    class="block w-full pl-12 pr-4 py-4 rounded-full border-none shadow-xl text-gray-800 placeholder-gray-400 focus:ring-4 focus:ring-cyan-300 text-lg" 
+                    placeholder="Cari judul, penulis, subjek, atau ISBN...">
+            </div>
+            <p class="text-sm text-cyan-200 mt-2" id="statusMessage">Memuat data perpustakaan...</p>
+        </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto px-4 pb-12">
+        <div id="paginationContainerTop" class="flex justify-center mb-6"></div>
+        <div id="dataListContainer" class="grid grid-cols-1 gap-6">
+            <div class="animate-pulse space-y-4">
+                <div class="h-32 bg-gray-200 rounded-lg"></div>
+            </div>
+        </div>
+        <div id="paginationContainer" class="flex justify-center mt-8"></div>
+    </div>
+
+    <div id="detailModalWrapper" class="fixed inset-0 bg-gray-900 bg-opacity-0 hidden items-center justify-center z-50 p-4 modal-transition-bg">
+        <div id="detailModalContent" class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col opacity-0 scale-95 modal-transition-content">
+            
+            <div class="bg-cyan-50 px-6 py-4 border-b border-cyan-100 flex justify-between items-start">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800" id="modalJudul">Judul Buku</h2>
+                    <p class="text-cyan-700 font-medium mt-1" id="modalPenulis">Penulis</p>
+                </div>
+                <button onclick="closeDetailModal()" class="text-gray-400 hover:text-gray-600 transition p-2 bg-white rounded-full shadow-sm">
+                    <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto custom-scrollbar">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    
+                    <div class="md:col-span-2 space-y-6">
+                        <div id="modalTopikContainer" class="flex flex-wrap gap-2"></div>
+                        <div class="bg-gray-50 p-4 rounded-xl border border-gray-100">
+                            <h3 class="font-semibold text-gray-700 mb-2">Abstrak / Deskripsi</h3>
+                            <p class="text-gray-600 text-sm leading-relaxed" id="modalAbstrak">-</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div><span class="block text-gray-500 text-xs uppercase tracking-wider">Penerbit</span><span class="font-medium text-gray-800" id="modalPenerbit">-</span></div>
+                            <div><span class="block text-gray-500 text-xs uppercase tracking-wider">Tahun Terbit</span><span class="font-medium text-gray-800" id="modalTahun">-</span></div>
+                            <div><span class="block text-gray-500 text-xs uppercase tracking-wider">Edisi</span><span class="font-medium text-gray-800" id="modalEdisi">-</span></div>
+                            <div><span class="block text-gray-500 text-xs uppercase tracking-wider">ISBN/ISSN</span><span class="font-medium text-gray-800" id="modalISBN">-</span></div>
+                            <div><span class="block text-gray-500 text-xs uppercase tracking-wider">Klasifikasi</span><span class="font-medium text-gray-800" id="modalKlasifikasi">-</span></div>
+                            <div><span class="block text-gray-500 text-xs uppercase tracking-wider">Deskripsi Fisik</span><span class="font-medium text-gray-800" id="modalFisik">-</span></div>
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-1">
+                        <div class="bg-cyan-50 rounded-xl p-4 border border-cyan-200 h-full">
+                            <h3 class="font-bold text-cyan-900 mb-3 flex items-center">
+                                <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                </svg>
+                                Lokasi & Ketersediaan
+                            </h3>
+                            <div class="text-center mb-4 p-3 bg-white rounded-lg shadow-sm">
+                                <span class="block text-sm text-gray-500">Stok Tersedia</span>
+                                <span class="text-3xl font-bold text-cyan-600" id="modalStokCount">0</span>
+                                <span class="text-sm text-gray-400">Ekslempar</span>
+                            </div>
+                            <div class="space-y-3 overflow-y-auto max-h-[300px] pr-1 custom-scrollbar" id="modalEkslemparList"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 px-6 py-4 border-t border-gray-100 flex justify-between">
+                <div class="flex space-x-3">
+                    <button onclick="navDetail(-1)" id="modalPrevButton" 
+                        class="bg-cyan-700 hover:bg-cyan-800 text-white font-medium py-2 px-4 rounded-lg transition duration-150 flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                        Sebelumnya
+                    </button>
+                    <button onclick="navDetail(1)" id="modalNextButton"
+                        class="bg-cyan-700 hover:bg-cyan-800 text-white font-medium py-2 px-4 rounded-lg transition duration-150 flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                        Selanjutnya
+                        <svg class="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
+                    </button>
+                    <button onclick="randomDetail()" id="modalAcakButton" 
+                        class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition duration-150 flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg class="w-5 h-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 8l-4 4m0 0l4 4m-4-4h2a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v2" />
+                        </svg>
+                        Acak
+                    </button>
+                </div>
+                <div>
+                    <button onclick="closeDetailModal()" class="bg-gray-800 hover:bg-gray-900 text-white font-medium py-2 px-6 rounded-lg transition duration-150">
+                        Tutup
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // --- 1. CONFIG FIREBASE & GLOBAL VARIABLES ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
+            authDomain: "databuku-6385c.firebaseapp.com",
+            databaseURL: "https://databuku-6385c-default-rtdb.firebaseio.com",
+            projectId: "databuku-6385c",
+            storageBucket: "databuku-6385c.firebasestorage.app",
+            messagingSenderId: "844439345466",
+            appId: "1:844439345466:web:fb90dfc8337a96f0621803"
+        };
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const dataListContainer = document.getElementById('dataListContainer');
+        const filterInput = document.getElementById('filterInput');
+        const paginationContainer = document.getElementById('paginationContainer');
+        const paginationContainerTop = document.getElementById('paginationContainerTop');
+        const statusMessage = document.getElementById('statusMessage');
+        const detailModalWrapper = document.getElementById('detailModalWrapper'); 
+        const detailModalContent = document.getElementById('detailModalContent'); 
+
+        const DOCUMENTS_PER_PAGE = 10; 
+        let currentPage = 1;
+        
+        let globalBiblioList = [];
+        let currentDisplayList = [];
+        let ekslemparDataMap = new Map(); 
+        let isDataLoaded = false;
+        let currentSelectedIndex = -1; 
+        
+        // --- 2. UTILITY FUNCTIONS (TETAP SAMA) ---
+        function parseTopics(topics) {
+            if (Array.isArray(topics)) return topics.map(t => t.replace(/[<>]/g, '').trim());
+            return [];
+        }
+        function getSearchableText(biblio) {
+             const cleanTopics = parseTopics(biblio.topik);
+             return `${biblio.judul || ''} ${biblio.penulis || ''} ${biblio.penerbit || ''} ${cleanTopics.join(' ') || ''} ${biblio.isbn_issn || ''}`.toLowerCase();
+        }
+
+        // --- 3. DATA LOGIC (TETAP SAMA) ---
+        function initializeApp() {
+            db.collection('ekslempar').onSnapshot(snapshot => {
+                ekslemparDataMap.clear();
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const code = String(data.kode).trim();
+                    if(code) {
+                        if (!ekslemparDataMap.has(code)) {
+                            ekslemparDataMap.set(code, []);
+                        }
+                        ekslemparDataMap.get(code).push(data);
+                    }
+                });
+                if (isDataLoaded) {
+                    renderCurrentPage(); 
+                }
+            });
+            db.collection('biblio').orderBy('judul').onSnapshot(snapshot => {
+                globalBiblioList = [];
+                snapshot.forEach(doc => {
+                    const data = { id: doc.id, ...doc.data() };
+                    data._searchableText = getSearchableText(data);
+                    globalBiblioList.push(data);
+                });
+                isDataLoaded = true;
+                statusMessage.textContent = `Menampilkan ${globalBiblioList.length} koleksi pustaka.`;
+                statusMessage.className = "text-sm text-cyan-100 mt-2";
+                handleSearch();
+            }, error => {
+                console.error(error);
+                statusMessage.textContent = "Gagal memuat data. Silakan refresh halaman.";
+                statusMessage.className = "text-sm text-red-200 mt-2";
+            });
+        }
+
+        // --- 4. SEARCH & PAGINATION LOGIC (Diperbaiki untuk Animasi) ---
+
+        function handleSearch() {
+            const query = filterInput.value.toLowerCase().trim();
+            if (query === '') {
+                currentDisplayList = [...globalBiblioList];
+            } else {
+                currentDisplayList = globalBiblioList.filter(item => item._searchableText.includes(query));
+            }
+            currentPage = 1;
+            // Gunakan fungsi yang disempurnakan untuk animasi
+            prepareAndRenderPage();
+        }
+
+        function goToRandomPage() {
+            const totalItems = currentDisplayList.length;
+            if (totalItems === 0) return;
+            const totalPages = Math.ceil(totalItems / DOCUMENTS_PER_PAGE);
+            const newPage = Math.floor(Math.random() * totalPages) + 1;
+            currentPage = newPage;
+            // Gunakan fungsi yang disempurnakan untuk animasi
+            prepareAndRenderPage();
+            window.scrollTo(0, 0);
+        }
+
+        /**
+         * Fungsi ini memastikan animasi fade-out item lama terlihat 
+         * sebelum merender item baru (fade-in).
+         */
+        function prepareAndRenderPage(scrollToTop = true) {
+            // Tambahkan kelas animasi keluar ke item yang ada
+            Array.from(dataListContainer.children).forEach(child => {
+                child.classList.add('animate-list-item-out');
+            });
+            
+            // Tunggu sebentar (sesuai durasi fadeOutSlide: 200ms)
+            setTimeout(() => {
+                renderCurrentPage();
+                if(scrollToTop) window.scrollTo(0, 0);
+            }, 200); 
+        }
+
+        function renderCurrentPage() {
+            const totalItems = currentDisplayList.length;
+            const totalPages = Math.ceil(totalItems / DOCUMENTS_PER_PAGE);
+            
+            // ... (Logika penentuan item dan render tetap sama) ...
+            if (totalItems === 0) {
+                // ... (Rendering "Tidak ditemukan" tetap sama) ...
+                dataListContainer.innerHTML = `
+                    <div class="text-center py-12 bg-white rounded-lg shadow">
+                        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <h3 class="mt-2 text-sm font-medium text-gray-900">Tidak ditemukan</h3>
+                        <p class="mt-1 text-sm text-gray-500">Coba kata kunci lain atau judul buku yang berbeda.</p>
+                    </div>`;
+                renderPagination(0);
+                return;
+            }
+
+            const startIndex = (currentPage - 1) * DOCUMENTS_PER_PAGE;
+            const endIndex = startIndex + DOCUMENTS_PER_PAGE;
+            const items = currentDisplayList.slice(startIndex, endIndex);
+
+            dataListContainer.innerHTML = ''; // Kosongkan container setelah animasi keluar
+            
+            items.forEach((biblio, indexInPage) => {
+                const biblioCodes = Array.isArray(biblio.kode) ? biblio.kode : [];
+                let totalCopies = 0;
+                
+                biblioCodes.forEach(code => {
+                    const trimmed = String(code).trim();
+                    if(ekslemparDataMap.has(trimmed)) {
+                        totalCopies += ekslemparDataMap.get(trimmed).length;
+                    }
+                });
+
+                const topics = parseTopics(biblio.topik);
+                const topicBadges = topics.slice(0, 3).map(t => `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800 mr-1">${t}</span>`).join('');
+                const remainingTopics = topics.length > 3 ? `<span class="text-xs text-gray-500">+${topics.length - 3} lainnya</span>` : '';
+
+                const coverImageUrl = biblio.sampul_url || null; 
+                const coverHtml = coverImageUrl 
+                    ? `<img src="${coverImageUrl}" alt="Sampul Buku ${biblio.judul || 'Tanpa Judul'}" class="w-24 h-32 object-cover rounded shadow-md border border-gray-100">`
+                    : `<div class="w-24 h-32 bg-gradient-to-br from-cyan-600 to-cyan-800 rounded shadow-md flex items-center justify-center text-white">
+                            <svg class="w-10 h-10 opacity-50" fill="currentColor" viewBox="0 0 20 20"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/></svg>
+                        </div>`;
+
+                const card = document.createElement('div');
+                // Tambahkan kelas animasi dan staggered delay
+                card.className = "book-card bg-white rounded-xl p-5 shadow-sm border border-gray-200 flex flex-col md:flex-row gap-5 cursor-pointer hover:border-cyan-300 animate-list-item"; 
+                card.style.animationDelay = `${indexInPage * 0.05}s`; 
+                
+                const globalIndex = startIndex + indexInPage;
+                card.onclick = () => openDetailModal(globalIndex);
+
+                card.innerHTML = `
+                    <div class="flex-shrink-0 flex justify-center md:block">${coverHtml}</div>
+                    
+                    <div class="flex-grow flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-900 leading-tight mb-1">${biblio.judul || 'Tanpa Judul'}</h3>
+                            <p class="text-gray-600 font-medium mb-2">${biblio.penulis || 'Penulis Tidak Diketahui'}</p>
+                            <div class="mb-3">${topicBadges} ${remainingTopics}</div>
+                            
+                            <div class="flex flex-wrap gap-y-1 gap-x-4 text-sm text-gray-500">
+                                <span>${biblio.penerbit ? '🏢 ' + biblio.penerbit : ''}</span>
+                                <span>${biblio.tahun_terbit ? '📅 ' + biblio.tahun_terbit : ''}</span>
+                                <span>${biblio.nomor_panggil ? '🏷️ ' + biblio.nomor_panggil : ''}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col items-end justify-center min-w-[120px] border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 pl-0 md:pl-4 mt-4 md:mt-0">
+                        <span class="text-xs text-gray-500 uppercase tracking-wide">Ketersediaan</span>
+                        <span class="text-2xl font-bold ${totalCopies > 0 ? 'text-green-600' : 'text-red-500'}">${totalCopies}</span>
+                        <span class="text-xs font-medium text-gray-600">Ekslempar</span>
+                        <button class="mt-3 text-cyan-700 hover:text-cyan-900 text-sm font-semibold flex items-center group">
+                            Lihat Detail 
+                            <svg class="w-4 h-4 ml-1 transform group-hover:translate-x-1 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                        </button>
+                    </div>
+                `;
+                dataListContainer.appendChild(card);
+            });
+
+            renderPagination(totalPages);
+        }
+
+        function renderPagination(totalPages) {
+            const containers = [paginationContainer, paginationContainerTop];
+            
+            containers.forEach(container => {
+                container.innerHTML = '';
+                
+                const navWrapper = document.createElement('div');
+                navWrapper.className = 'flex items-center space-x-4';
+
+                if (totalPages > 1) {
+                     // Tombol Random
+                     const randomBtn = document.createElement('button');
+                     randomBtn.innerHTML = `
+                        <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 8l-4 4m0 0l4 4m-4-4h2a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v2" />
+                        </svg>
+                        Acak
+                     `;
+                     randomBtn.className = 'inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium rounded-md text-gray-700 hover:bg-gray-50 transition';
+                     // Gunakan goToRandomPage yang sudah ditingkatkan
+                     randomBtn.onclick = goToRandomPage; 
+                     navWrapper.appendChild(randomBtn);
+                
+                    // Navigasi Utama
+                    const nav = document.createElement('nav');
+                    nav.className = 'inline-flex rounded-md shadow-sm -space-x-px';
+
+                    // Previous
+                    const prev = document.createElement('button');
+                    prev.innerHTML = '&larr;';
+                    prev.className = `px-3 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium ${currentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'}`;
+                    prev.disabled = currentPage === 1;
+                    // Ubah onclick untuk menggunakan prepareAndRenderPage
+                    prev.onclick = () => { currentPage--; prepareAndRenderPage(true); };
+                    nav.appendChild(prev);
+
+                    // Info
+                    const info = document.createElement('span');
+                    info.className = "px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700";
+                    info.innerText = `Hal ${currentPage} dari ${totalPages}`;
+                    nav.appendChild(info);
+
+                    // Next
+                    const next = document.createElement('button');
+                    next.innerHTML = '&rarr;';
+                    next.className = `px-3 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium ${currentPage === totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'}`;
+                    next.disabled = currentPage === totalPages;
+                    // Ubah onclick untuk menggunakan prepareAndRenderPage
+                    next.onclick = () => { currentPage++; prepareAndRenderPage(true); };
+                    nav.appendChild(next);
+                    
+                    navWrapper.appendChild(nav);
+                }
+                
+                container.appendChild(navWrapper);
+            });
+        }
+
+        // --- 5. MODAL DETAIL LOGIC (Diperbaiki untuk Animasi Navigasi Detail) ---
+
+        // Fungsi pembantu untuk membuka modal dengan data baru
+        function populateAndShowModal(index) {
+            const biblio = currentDisplayList[index];
+            currentSelectedIndex = index;
+
+            // --- Pengisian Data Modal ---
+            document.getElementById('modalJudul').textContent = biblio.judul || 'Tanpa Judul';
+            document.getElementById('modalPenulis').textContent = biblio.penulis ? `Karya: ${biblio.penulis}` : '';
+            document.getElementById('modalAbstrak').textContent = biblio.abstrak || 'Tidak ada deskripsi tersedia.';
+            document.getElementById('modalPenerbit').textContent = biblio.penerbit || '-';
+            document.getElementById('modalTahun').textContent = biblio.tahun_terbit || '-';
+            document.getElementById('modalEdisi').textContent = biblio.edisi || '-';
+            document.getElementById('modalISBN').textContent = biblio.isbn_issn || '-';
+            document.getElementById('modalKlasifikasi').textContent = biblio.klasifikasi || '-';
+            document.getElementById('modalFisik').textContent = biblio.deskripsi_fisik || '-';
+
+            // Topik
+            const topicContainer = document.getElementById('modalTopikContainer');
+            topicContainer.innerHTML = '';
+            parseTopics(biblio.topik).forEach(tag => {
+                const span = document.createElement('span');
+                span.className = 'px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full text-xs font-semibold';
+                span.textContent = tag;
+                topicContainer.appendChild(span);
+            });
+            
+            // Ketersediaan
+            const listContainer = document.getElementById('modalEkslemparList');
+            listContainer.innerHTML = '';
+            const biblioCodes = Array.isArray(biblio.kode) ? biblio.kode : [];
+            let stockCount = 0;
+            let foundCopies = [];
+            biblioCodes.forEach(code => {
+                const trimmed = String(code).trim();
+                if(ekslemparDataMap.has(trimmed)) {
+                    ekslemparDataMap.get(trimmed).forEach(copy => foundCopies.push(copy));
+                }
+            });
+            stockCount = foundCopies.length;
+            document.getElementById('modalStokCount').textContent = stockCount;
+            if (stockCount === 0) {
+                listContainer.innerHTML = `<p class="text-sm text-red-500 italic text-center py-4">Maaf, buku ini tidak tersedia di rak saat ini.</p>`;
+            } else {
+                foundCopies.forEach(copy => {
+                    const el = document.createElement('div');
+                    el.className = "p-3 bg-white rounded border border-gray-100 shadow-sm flex justify-between items-center";
+                    el.innerHTML = `<div><div class="text-xs text-gray-400">Lokasi Rak</div><div class="text-sm font-bold text-gray-800">${copy.lokasi_rak || 'Resepsionis'}</div></div><div class="text-right"><div class="text-xs text-gray-400">Kode Inv</div><div class="text-xs font-mono bg-gray-100 px-1 rounded">${copy.kode_inventaris || '-'}</div></div>`;
+                    listContainer.appendChild(el);
+                });
+            }
+
+            // LOGIKA DISABLE BUTTONS
+            const totalItems = currentDisplayList.length;
+            document.getElementById('modalPrevButton').disabled = index === 0;
+            document.getElementById('modalNextButton').disabled = index === totalItems - 1;
+            document.getElementById('modalAcakButton').disabled = totalItems <= 1;
+
+            // Tampilkan konten modal dengan animasi
+            detailModalContent.classList.remove('opacity-0', 'scale-95');
+            detailModalContent.classList.add('opacity-100', 'scale-100');
+        }
+
+
+        function openDetailModal(index) {
+            if (index < 0 || index >= currentDisplayList.length) return; 
+
+            detailModalWrapper.classList.remove('hidden');
+            detailModalWrapper.classList.add('flex');
+            document.body.classList.add('modal-open');
+
+            // Timeout pertama untuk transisi latar belakang
+            setTimeout(() => {
+                detailModalWrapper.classList.remove('bg-opacity-0');
+                detailModalWrapper.classList.add('bg-opacity-70');
+                populateAndShowModal(index); // Isi dan tampilkan konten
+            }, 10); 
+        }
+
+        function closeDetailModal() {
+            // Animasi menutup modal (konten)
+            detailModalWrapper.classList.remove('bg-opacity-70');
+            detailModalWrapper.classList.add('bg-opacity-0');
+            detailModalContent.classList.remove('opacity-100', 'scale-100');
+            detailModalContent.classList.add('opacity-0', 'scale-95');
+
+            // Sembunyikan setelah transisi selesai (250ms sesuai CSS)
+            setTimeout(() => {
+                detailModalWrapper.classList.add('hidden');
+                detailModalWrapper.classList.remove('flex');
+                document.body.classList.remove('modal-open');
+                currentSelectedIndex = -1; 
+            }, 250); 
+        }
+
+        /**
+         * FUNGSI BARU: Mengganti detail saat tombol Maju/Mundur di modal diklik
+         * Ini mensimulasikan tutup-buka dengan cepat untuk memicu animasi
+         * @param {number} direction -1 untuk Sebelumnya, 1 untuk Selanjutnya
+         */
+        function navDetail(direction) {
+            let newIndex = currentSelectedIndex + direction;
+            if (newIndex >= 0 && newIndex < currentDisplayList.length) {
+                
+                // 1. Sembunyikan konten lama (animasi keluar)
+                detailModalContent.classList.remove('opacity-100', 'scale-100');
+                detailModalContent.classList.add('opacity-0', 'scale-95');
+                
+                // 2. Tunggu sebentar (setengah durasi animasi)
+                setTimeout(() => {
+                    // 3. Isi konten dengan data baru
+                    populateAndShowModal(newIndex);
+                }, 125); // 125ms = setengah dari 250ms durasi transisi
+            }
+        }
+        
+        // Perbarui fungsi randomDetail agar menggunakan pola transisi
+        function randomDetail() {
+            const totalItems = currentDisplayList.length;
+            if (totalItems <= 1) return;
+
+            let newIndex;
+            do {
+                newIndex = Math.floor(Math.random() * totalItems);
+            } while (newIndex === currentSelectedIndex); 
+            
+            // 1. Sembunyikan konten lama (animasi keluar)
+            detailModalContent.classList.remove('opacity-100', 'scale-100');
+            detailModalContent.classList.add('opacity-0', 'scale-95');
+            
+            // 2. Tunggu sebentar
+            setTimeout(() => {
+                // 3. Isi konten dengan data baru
+                populateAndShowModal(newIndex);
+            }, 125);
+        }
+        
+        // --- 6. EVENT LISTENERS ---
+        filterInput.addEventListener('keyup', handleSearch);
+        
+        // Start App
+        window.onload = initializeApp;
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIRKULASI: Peminjaman & Pengembalian</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <style>
+        /* --- TEMA WARNA CUSTOM - RAPI, BERSIH, PROFESIONAL --- */
+        :root {
+            /* Gradasi Akses (Hijau-Biru Lembut) */
+            --color-gradient-start: #00a8cc; /* Soft Cyan */
+            --color-gradient-end: #4a90e2; /* Soft Professional Blue */
+            
+            /* Warna Dasar */
+            --color-primary-light: #f0f9ff; /* Sangat terang, untuk highlight lembut */
+            --color-primary-medium: #80c4e7; /* Untuk ring fokus */
+            --color-primary-border: #d1e9f7; /* Border lembut */
+            --color-primary-text: #075985; /* Deep blue untuk kontras */
+            --color-dark-text: #374151; /* Standard dark text */
+        }
+
+        /* Gradient Class */
+        .bg-primary-gradient { 
+            background-image: linear-gradient(to right, var(--color-gradient-start), var(--color-gradient-end)); 
+        }
+        .text-primary-gradient {
+            background-image: linear-gradient(to right, var(--color-gradient-start), var(--color-gradient-end));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent; 
+            display: inline-block;
+        }
+
+        /* Autocomplete styles */
+        .autocomplete-container {
+            position: relative;
+            z-index: 10;
+        }
+        .autocomplete-list {
+            position: absolute;
+            border: 1px solid var(--color-primary-border);
+            border-top: none;
+            z-index: 99;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 250px; /* Lebih tinggi */
+            overflow-y: auto;
+            background-color: white;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* Shadow lebih profesional */
+            border-radius: 0 0 0.5rem 0.5rem;
+        }
+        .autocomplete-item {
+            padding: 10px 15px; /* Padding lebih besar */
+            cursor: pointer;
+            border-bottom: 1px solid #f3f4f6;
+            transition: background-color 0.2s;
+        }
+        /* Active State (Navigasi Keyboard/Hover) */
+        .autocomplete-item:hover, .autocomplete-item.active {
+            background-color: var(--color-primary-light);
+        }
+        .autocomplete-item strong {
+            color: var(--color-primary-text);
+        }
+
+        /* Modal Style - Bersih dan Berpusat */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 100; 
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow-y: auto; 
+            background-color: rgba(0,0,0,0.3); /* Backdrop lebih lembut */
+            padding-top: 50px;
+            justify-content: center; 
+            align-items: flex-start;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 50px auto; /* Margin atas untuk centering */
+            padding: 30px; /* Padding lebih besar */
+            border-radius: 12px; /* Sudut lebih bulat */
+            width: 95%;
+            max-width: 650px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); /* Shadow dalam */
+            transition: all 0.3s ease-out;
+        }
+        .modal-confirm-content { 
+            max-width: 400px;
+            padding: 30px;
+            text-align: center; 
+        }
+
+        /* Input Focus Ring */
+        .input-focus-style:focus {
+             --tw-ring-color: var(--color-primary-medium);
+             border-color: var(--color-primary-medium);
+        }
+
+        /* TOAST NOTIFICATION CONTAINER STYLE */
+        #toastContainer {
+            position: fixed;
+            bottom: 20px; 
+            right: 20px;
+            z-index: 110; 
+            display: flex;
+            flex-direction: column-reverse; 
+            gap: 10px;
+        }
+        .toast {
+            padding: 12px 20px; /* Padding lebih besar */
+            border-radius: 8px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); /* Shadow lembut */
+            color: white;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+            font-size: 0.9rem; 
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        .toast-success { background-color: #10b981; } /* Green */
+        .toast-error { background-color: #ef4444; } /* Red */
+    </style>
+</head>
+<body class="bg-gray-100 p-4 sm:p-8">
+<div class="container max-w-2xl mx-auto bg-white p-6 sm:p-8 rounded-xl shadow-2xl">
+  
+  <div class="mb-6 border-b pb-4">
+      <div class="flex justify-between items-center">
+          <h3 class="text-3xl font-extrabold text-primary-gradient uppercase tracking-tight">SIRKULASI PEMINJAMAN</h3>
+          <button onclick="tampilkanConfigModal()" class="text-gray-400 hover:text-gray-600 text-2xl p-2 rounded-full hover:bg-gray-50 transition duration-150" title="Pengaturan Sistem">
+              <i class="fas fa-cog"></i> </button>
+      </div>
+      <p class="text-sm text-gray-500 mt-1">Pilih anggota atau masukkan ID/NIS dan tekan <span class="font-semibold">Enter</span>.</p>
+  </div>
+
+  <div class="mb-6 p-5 border border-primary-border rounded-lg bg-primary-light/50">
+      <h4 class="text-lg font-semibold mb-3 text-primary-text">Cari Anggota</h4>
+      <div class="autocomplete-container">
+          <input type="text" id="inputAnggota" placeholder="Ketik nama atau ID anggota..." 
+              class="input-focus-style w-full p-3 border border-gray-300 rounded-lg text-base shadow-sm transition">
+          <div id="listAnggota" class="autocomplete-list hidden"></div>
+      </div>
+      <div id="infoAnggota" class="mt-3 text-sm text-gray-700 font-medium"></div>
+  </div>
+
+</div>
+
+<div id="toastContainer"></div>
+
+<div id="loanModal" class="modal">
+    <div class="modal-content">
+        <div class="flex justify-between items-center border-b pb-4 mb-5">
+            <h3 class="text-2xl font-bold text-primary-gradient"></h3>
+            <button id="btnCloseModal" onclick="tutupModal()" class="text-gray-400 hover:text-gray-800 text-3xl leading-none p-1 rounded-full hover:bg-gray-100 transition">&times;</button>
+        </div>
+
+        <div class="bg-primary-gradient p-5 rounded-xl text-white shadow-xl mb-6">
+            <p class="text-sm font-light opacity-90 mb-1">ID CARD ANGGOTA</p>
+            <h4 id="modalAnggotaNama" class="text-2xl font-extrabold tracking-wide">Nama Anggota</h4>
+            <div class="flex justify-between items-center mt-3 text-sm">
+                <p><span class="opacity-80">ID:</span> <span id="modalAnggotaNis" class="font-bold"></span></p>
+                <div class="flex items-center">
+                    <p><span class="opacity-80">Role:</span> <span id="modalAnggotaRole" class="font-bold mr-2"></span></p>
+                    <button id="btnEditRole" onclick="tampilkanRoleEditModal()" class="text-white/80 hover:text-yellow-200 text-base p-1 rounded-full transition" title="Ubah Role/Label Anggota">
+                         <i class="fas fa-user-tag"></i> 
+                    </button>
+                </div>
+            </div>
+            <p class="mt-2 text-sm"><span class="opacity-80">Kamar/Blok:</span> <span id="modalAnggotaKamar" class="font-bold"></span></p>
+
+            <p id="modalInfoPinjam" class="mt-4 text-xs italic font-medium opacity-90"></p>
+
+            <div id="currentLoanInfo" class="mt-4 p-4 bg-white/20 backdrop-blur-sm rounded-lg shadow-inner hidden">
+                <p class="text-sm font-semibold mb-1">Buku Sedang Dipinjam:</p>
+                <p class="text-xl font-bold" id="loanBookTitle"></p>
+                <p class="text-xs italic opacity-90" id="loanBookCode"></p>
+                
+                <div class="mt-2 flex justify-between items-center border-t border-white/30 pt-2">
+                    <p class="text-sm">Due: <span id="loanDueDate" class="font-bold"></span></p>
+                    <button id="btnCustomDate" onclick="tampilkanCustomDateModal()" class="text-white/80 hover:text-yellow-200 text-base p-1 rounded-full transition" title="Ubah Tanggal Kembali Manual">
+                         <i class="fas fa-calendar-alt"></i> 
+                    </button>
+                </div>
+                <p class="text-xs mt-1">Lokasi Rak: <span id="loanBookLocation" class="font-bold text-yellow-200"></span></p>
+
+                
+                <div id="loanActionButtons" class="mt-4 flex space-x-3">
+                    <button id="btnKembalikan" onclick="tampilkanKembalikanConfirmModal()" class="flex-1 py-3 text-sm font-bold bg-red-600 text-white rounded-lg hover:bg-red-700 transition duration-150 shadow-md flex items-center justify-center">
+                        <i class="fas fa-undo mr-2"></i> KEMBALIKAN
+                    </button>
+                    <button id="btnPerpanjang" onclick="tampilkanPerpanjangConfirmModal()" class="flex-1 py-3 text-sm font-bold bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition duration-150 shadow-md flex items-center justify-center">
+                        <i class="fas fa-history mr-2"></i> PERPANJANG
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="loanSection">
+            <div class="mb-6 p-5 border border-gray-200 rounded-lg bg-gray-50">
+                <h4 class="text-lg font-semibold mb-3 text-dark-text">Cari Buku & Ekslempar Baru</h4>
+                <div class="autocomplete-container">
+                    <input type="text" id="inputBuku" placeholder="Ketik kode ekslempar dan tekan **Enter** untuk pinjam cepat..." 
+                        class="input-focus-style w-full p-3 border border-gray-300 rounded-lg text-base shadow-sm transition">
+                    <div id="listBuku" class="autocomplete-list hidden"></div>
+                </div>
+                <div id="infoBuku" class="mt-3 text-sm text-gray-700 font-medium"></div>
+            </div>
+
+            <div class="mt-4">
+                <button id="btnPinjam" class="w-full py-3 px-4 rounded-xl text-lg font-bold bg-primary-gradient text-white hover:opacity-95 transition duration-200 shadow-md disabled:bg-gray-300 disabled:opacity-80 disabled:shadow-none" disabled>
+                    PILIH BUKU UNTUK KONFIRMASI
+                </button>
+            </div>
+        </div>
+        
+    </div>
+</div>
+
+<div id="configModal" class="modal">
+    <div class="modal-content max-w-lg">
+        <div class="flex justify-between items-center border-b pb-3 mb-4">
+            <h3 class="text-xl font-bold text-primary-gradient">Pengaturan Transaksi</h3>
+            <button onclick="tutupConfigModal()" class="text-gray-400 hover:text-gray-800 text-3xl leading-none p-1 rounded-full hover:bg-gray-100 transition">&times;</button>
+        </div>
+
+        <h4 class="text-lg font-semibold mb-3 text-dark-text">Durasi Peminjaman (Hari)</h4>
+        <div id="durationSettingsForm" class="space-y-3 p-4 bg-gray-50 rounded-lg max-h-60 overflow-y-auto border border-gray-200">
+            <p class="text-sm text-gray-500 italic">Memuat pengaturan dari Firestore...</p>
+        </div>
+
+        <h4 class="text-lg font-semibold mb-3 mt-5 text-dark-text">Denda Keterlambatan</h4>
+        <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <label for="inputDendaHarian" class="block text-sm font-medium text-gray-700 mb-1">Denda per Hari (Rp)</label>
+            <input type="number" id="inputDendaHarian" value="1000" min="0" step="100" class="input-focus-style w-full p-2 border border-gray-300 rounded-lg text-sm shadow-sm transition">
+        </div>
+
+        <div class="mt-6">
+            <button onclick="simpanPengaturan()" class="w-full py-3 px-4 rounded-xl text-sm font-bold bg-primary-gradient text-white hover:opacity-95 transition duration-200 shadow-md">
+                SIMPAN PENGATURAN
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="customDateModal" class="modal">
+    <div class="modal-content max-w-sm">
+        <div class="flex justify-between items-center border-b pb-3 mb-4">
+            <h3 class="text-xl font-bold text-primary-gradient">Ubah Tanggal Kembali (Due)</h3>
+            <button onclick="tutupCustomDateModal()" class="text-gray-400 hover:text-gray-800 text-3xl leading-none p-1 rounded-full hover:bg-gray-100 transition">&times;</button>
+        </div>
+
+        <p class="text-sm text-gray-700 mb-4">Pilih tanggal jatuh tempo baru. Tanggal dapat dipilih dari masa lalu atau masa depan.</p>
+        
+        <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <label for="inputNewDueDate" class="block text-sm font-medium text-gray-700 mb-1">Tanggal Kembali Baru</label>
+            <input type="date" id="inputNewDueDate" 
+                   class="input-focus-style w-full p-2 border border-gray-300 rounded-lg text-sm shadow-sm transition"
+                   data-original-loan-id="">
+        </div>
+
+        <div class="mt-6">
+            <button id="btnSaveNewDueDate" class="w-full py-3 px-4 rounded-xl text-sm font-bold bg-primary-gradient text-white hover:opacity-95 transition duration-200 shadow-md">
+                SIMPAN TANGGAL BARU
+            </button>
+        </div>
+    </div>
+</div>
+
+<div id="roleEditModal" class="modal">
+    <div class="modal-content max-w-sm">
+        <div class="flex justify-between items-center border-b pb-3 mb-4">
+            <h3 class="text-xl font-bold text-primary-gradient">Ubah Role Anggota</h3>
+            <button onclick="tutupRoleEditModal()" class="text-gray-400 hover:text-gray-800 text-3xl leading-none p-1 rounded-full hover:bg-gray-100 transition">&times;</button>
+        </div>
+        <p class="text-sm text-gray-700 mb-4">Ubah Role untuk <span class="font-bold text-dark-text" id="roleAnggotaNamaTarget"></span> (ID: <span id="roleAnggotaNisTarget"></span>).</p>
+        
+        <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <label for="selectNewRole" class="block text-sm font-medium text-gray-700 mb-1">Pilih Role Baru</label>
+            <select id="selectNewRole" class="input-focus-style w-full p-2 border border-gray-300 rounded-lg text-sm shadow-sm transition">
+                </select>
+            <p class="text-xs text-gray-500 mt-2 italic">Mengubah role akan mempengaruhi durasi pinjamnya.</p>
+        </div>
+
+        <div class="mt-6">
+            <button id="btnSimpanRole" onclick="simpanRoleAnggota()" class="w-full py-3 px-4 rounded-xl text-sm font-bold bg-green-600 text-white hover:bg-green-700 transition duration-200 shadow-md">
+                SIMPAN ROLE
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<div id="returnConfirmModal" class="modal">
+    <div class="modal-content modal-confirm-content">
+        <div class="text-center">
+            <i class="fas fa-undo text-5xl text-red-500 mb-4"></i>
+            <h3 class="text-2xl font-bold mb-3 text-dark-text">Konfirmasi Pengembalian</h3>
+            <p class="text-gray-600 mb-4">Yakin ingin mengembalikan buku ini?</p>
+            
+            <div id="returnFineInfo" class="p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm mb-4 hidden">
+                </div>
+
+            <div class="flex justify-between space-x-3 mt-5">
+                <button onclick="tutupReturnConfirmModal()" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 transition">
+                    Batal (Esc)
+                </button>
+                <button id="btnReturnConfirm" onclick="handleKembalikanConfirm()" class="w-full py-2 px-4 rounded-lg text-sm font-bold bg-red-600 text-white hover:bg-red-700 transition shadow-md">
+                    Kembalikan (Enter)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="renewConfirmModal" class="modal">
+    <div class="modal-content modal-confirm-content">
+        <div class="text-center">
+            <i class="fas fa-history text-5xl text-orange-400 mb-4"></i>
+            <h3 class="text-2xl font-bold mb-3 text-dark-text">Konfirmasi Perpanjangan</h3>
+            <p class="text-gray-600 mb-4">Perpanjang buku <span class="font-bold italic text-dark-text" id="renewBookTitle"></span>?</p>
+            
+            <div id="renewNewDateInfo" class="p-3 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm mb-4">
+                Tanggal Kembali Baru: <span id="newDueDateDisplay" class="font-bold"></span>
+            </div>
+
+            <div class="flex justify-between space-x-3 mt-5">
+                <button onclick="tutupRenewConfirmModal()" class="w-full py-2 px-4 rounded-lg text-sm font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 transition">
+                    Batal (Esc)
+                </button>
+                <button id="btnRenewConfirm" onclick="handlePerpanjangConfirm()" class="w-full py-2 px-4 rounded-lg text-sm font-bold bg-orange-500 text-white hover:bg-orange-600 transition shadow-md">
+                    Perpanjang (Enter)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+// 1. KONFIGURASI FIREBASE
+const firebaseConfig = {
+    apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
+    authDomain: "databuku-6385c.firebaseapp.com",
+    projectId: "databuku-6385c",
+};
+const app = firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// 2. PATH KOLEKSI
+const PATH_ANGGOTA = "keanggotaan_v2";
+const PATH_BIBLIO = "biblio";
+const PATH_EKSEMPLAR = "ekslempar"; 
+const PATH_TRANSAKSI = "transaksi_pinjam"; 
+
+// 3. ELEMEN DOM (Tidak diubah, hanya memastikan kelas Tailwind yang digunakan sudah disesuaikan)
+const inputAnggota = document.getElementById("inputAnggota");
+const listAnggota = document.getElementById("listAnggota");
+const infoAnggota = document.getElementById("infoAnggota");
+
+const loanModal = document.getElementById('loanModal');
+const btnPinjam = document.getElementById("btnPinjam");
+const toastContainer = document.getElementById("toastContainer"); 
+
+const inputBuku = document.getElementById("inputBuku");
+const listBuku = document.getElementById("listBuku");
+const infoBuku = document.getElementById("infoBuku");
+const loanSection = document.getElementById("loanSection"); 
+const modalAnggotaNama = document.getElementById("modalAnggotaNama");
+const modalAnggotaNis = document.getElementById("modalAnggotaNis");
+const modalAnggotaRole = document.getElementById("modalAnggotaRole");
+const modalAnggotaKamar = document.getElementById("modalAnggotaKamar"); 
+const modalInfoPinjam = document.getElementById("modalInfoPinjam");
+const currentLoanInfo = document.getElementById("currentLoanInfo"); 
+const loanBookTitle = document.getElementById("loanBookTitle");
+const loanBookCode = document.getElementById("loanBookCode");
+const loanDueDate = document.getElementById("loanDueDate"); 
+const loanBookLocation = document.getElementById("loanBookLocation"); 
+const btnKembalikan = document.getElementById("btnKembalikan");
+const btnPerpanjang = document.getElementById("btnPerpanjang");
+
+const configModal = document.getElementById("configModal"); 
+const durationSettingsForm = document.getElementById("durationSettingsForm"); 
+const inputDendaHarian = document.getElementById("inputDendaHarian"); 
+
+const customDateModal = document.getElementById("customDateModal");
+const inputNewDueDate = document.getElementById("inputNewDueDate");
+const btnSaveNewDueDate = document.getElementById("btnSaveNewDueDate");
+
+const returnConfirmModal = document.getElementById("returnConfirmModal");
+const returnFineInfo = document.getElementById("returnFineInfo");
+const btnReturnConfirm = document.getElementById("btnReturnConfirm");
+
+const renewConfirmModal = document.getElementById("renewConfirmModal");
+const renewBookTitle = document.getElementById("renewBookTitle");
+const renewNewDateInfo = document.getElementById("renewNewDateInfo");
+const newDueDateDisplay = document.getElementById("newDueDateDisplay");
+const btnRenewConfirm = document.getElementById("btnRenewConfirm");
+
+const roleEditModal = document.getElementById("roleEditModal");
+const roleAnggotaNamaTarget = document.getElementById("roleAnggotaNamaTarget");
+const roleAnggotaNisTarget = document.getElementById("roleAnggotaNisTarget");
+const selectNewRole = document.getElementById("selectNewRole");
+
+
+// 4. DATA GLOBAL DAN STATUS
+let globalAnggotaList = [];
+let globalBiblioList = [];
+let globalEkslemparMap = new Map(); 
+let selectedAnggota = null;
+let selectedBuku = null;
+let selectedEkslemparKode = null;
+let activeLoanDocId = null; 
+let loanDurationSettings = {}; 
+let dailyFineAmount = 1000; 
+const MIN_CHARS_FOR_SUGGEST = 1;
+const availableRoles = ['Anggota', 'Pustakawan', 'Khusus', 'Hanya Data']; 
+
+// NEW: Indeks untuk Navigasi Keyboard
+let activeIndex = -1; 
+let currentAutocompleteList = []; // Untuk menyimpan daftar yang sedang ditampilkan
+
+
+// --- UTILITY & HELPER FUNCTIONS ---
+
+function showToast(message, isError = true) {
+    const toast = document.createElement('div');
+    toast.className = `toast ${isError ? 'toast-error' : 'toast-success'}`;
+    toast.textContent = message;
+    toastContainer.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10);
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => toast.remove());
+    }, 3000);
+}
+
+function highlightMatch(text, query) {
+    if (!query) return text;
+    const regex = new RegExp(query, 'gi');
+    return text.replace(regex, (match) => `<strong>${match}</strong>`);
+}
+
+function getDueDate(days) {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return date.toISOString().split('T')[0]; 
+}
+
+function calculateLateFine(dueDate, finePerDay) {
+    const due = new Date(dueDate);
+    const today = new Date(getDueDate(0)); 
+    due.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    const diffTime = today - due;
+    let daysLate = 0;
+    if (diffTime > 0) {
+        daysLate = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
+    const fineAmount = daysLate * finePerDay;
+    return { daysLate, fineAmount };
+}
+
+function updatePinjamButton() {
+    if (selectedAnggota && selectedBuku && selectedEkslemparKode) {
+        btnPinjam.disabled = false;
+        btnPinjam.textContent = `KONFIRMASI PINJAM: (${selectedEkslemparKode})`;
+    } else {
+        btnPinjam.disabled = true;
+        btnPinjam.textContent = 'PILIH BUKU UNTUK KONFIRMASI';
+    }
+}
+
+function tutupModal() {
+    loanModal.style.display = 'none';
+    resetFormBuku(); 
+    resetFormAnggota(); 
+    tutupReturnConfirmModal();
+    tutupRenewConfirmModal(); 
+    tutupRoleEditModal(); 
+    inputAnggota.focus(); 
+}
+
+function tutupConfigModal() {
+    configModal.style.display = 'none';
+}
+
+function tampilkanConfigModal() {
+    loadSettingsToForm();
+    configModal.style.display = 'flex';
+}
+
+function loadSettingsToForm() {
+    inputDendaHarian.value = dailyFineAmount;
+
+    durationSettingsForm.innerHTML = ''; 
+    
+    const uniqueRoles = new Set(globalAnggotaList.map(a => a.role).filter(r => r && r !== 'Hanya Data'));
+    const rolesToDisplay = Array.from(new Set([...Object.keys(loanDurationSettings).filter(k => k !== 'denda_harian'), ...uniqueRoles])).sort();
+    
+    if (rolesToDisplay.length === 0) {
+        durationSettingsForm.innerHTML = '<p class="text-sm text-gray-500 italic">Tidak ada role anggota ditemukan.</p>';
+        return;
+    }
+
+    rolesToDisplay.forEach(role => {
+        if (role === 'Hanya Data') return; 
+        
+        const currentDuration = loanDurationSettings[role] || 0; 
+        
+        const div = document.createElement('div');
+        div.className = 'flex items-center space-x-2';
+        div.innerHTML = `
+            <label for="role-${role}" class="text-sm font-medium text-gray-700 w-24 truncate">${role}:</label>
+            <input type="number" id="role-${role}" value="${currentDuration}" min="0" 
+                   class="input-focus-style w-full p-2 border border-gray-300 rounded-lg text-sm shadow-sm transition" data-role-key="${role}">
+            <span class="text-sm text-gray-500">Hari</span>
+        `;
+        durationSettingsForm.appendChild(div);
+    });
+}
+
+function simpanPengaturan() {
+    const newDailyFine = parseInt(inputDendaHarian.value) || 0;
+    const newDurationSettings = {};
+
+    const roleInputs = durationSettingsForm.querySelectorAll('input[type="number"]');
+    roleInputs.forEach(input => {
+        const role = input.getAttribute('data-role-key');
+        const duration = parseInt(input.value) || 0;
+        newDurationSettings[role] = duration;
+    });
+
+    newDurationSettings.denda_harian = newDailyFine;
+
+    db.collection('config').doc('loanSettings').set(newDurationSettings, { merge: true })
+        .then(() => {
+            loanDurationSettings = newDurationSettings;
+            dailyFineAmount = newDailyFine;
+            showToast("✅ Pengaturan berhasil disimpan!", false);
+            tutupConfigModal();
+        })
+        .catch(error => {
+            console.error("Error menyimpan pengaturan:", error);
+            showToast(`❌ Gagal menyimpan pengaturan: ${error.message}`, true);
+        });
+}
+
+function tutupCustomDateModal() {
+    customDateModal.style.display = 'none';
+    btnSaveNewDueDate.disabled = false; 
+}
+
+function tampilkanCustomDateModal() {
+    if (!activeLoanDocId) {
+        showToast("Tidak ada pinjaman aktif untuk diubah tanggalnya.", true);
+        return;
+    }
+    
+    const currentDueText = loanDueDate.textContent;
+    const match = currentDueText.match(/\d{4}-\d{2}-\d{2}/);
+    const currentDue = match ? match[0] : '';
+
+    inputNewDueDate.value = currentDue;
+    inputNewDueDate.setAttribute('data-original-loan-id', activeLoanDocId);
+
+    customDateModal.style.display = 'flex';
+}
+
+function handleAutosaveDueDate() {
+    const loanId = inputNewDueDate.getAttribute('data-original-loan-id');
+    const newDueDate = inputNewDueDate.value;
+
+    if (!loanId || !newDueDate || !selectedAnggota) {
+        showToast("Kesalahan. ID Pinjaman atau Tanggal Kembali tidak valid.", true);
+        return;
+    }
+    
+    btnSaveNewDueDate.disabled = true;
+
+    db.collection(PATH_TRANSAKSI).doc(loanId).update({
+        tgl_kembali_due: newDueDate,
+        tgl_diubah_manual: getDueDate(0) 
+    })
+    .then(() => {
+        showToast(`✅ Tgl kembali berhasil diubah: ${newDueDate}.`, false);
+        tutupCustomDateModal();
+        checkExistingLoanAndDisplayModal(selectedAnggota); 
+    })
+    .catch(error => {
+        showToast(`❌ Gagal mengubah tgl kembali: ${error.message}`, true);
+        btnSaveNewDueDate.disabled = false;
+        checkExistingLoanAndDisplayModal(selectedAnggota);
+    });
+}
+
+function tutupRoleEditModal() {
+    roleEditModal.style.display = 'none';
+    loanModal.focus();
+}
+
+function tampilkanRoleEditModal() {
+    if (!selectedAnggota) {
+        showToast("Anggota belum dipilih.", true);
+        return;
+    }
+
+    roleAnggotaNamaTarget.textContent = selectedAnggota.keanggotaan;
+    roleAnggotaNisTarget.textContent = selectedAnggota.nis;
+
+    selectNewRole.innerHTML = '';
+    availableRoles.forEach(role => {
+        const option = document.createElement('option');
+        option.value = role;
+        option.textContent = role;
+        if (role === selectedAnggota.role) {
+            option.selected = true;
+        }
+        selectNewRole.appendChild(option);
+    });
+
+    roleEditModal.style.display = 'flex';
+}
+
+function simpanRoleAnggota() {
+    if (!selectedAnggota) {
+        showToast("Anggota belum dipilih.", true);
+        return;
+    }
+
+    const newRole = selectNewRole.value;
+    if (newRole === selectedAnggota.role) {
+        showToast("Role tidak berubah.", false);
+        tutupRoleEditModal();
+        return;
+    }
+
+    db.collection(PATH_ANGGOTA).doc(selectedAnggota.nis).update({
+        role: newRole
+    })
+    .then(() => {
+        const index = globalAnggotaList.findIndex(a => a.nis === selectedAnggota.nis);
+        if (index !== -1) {
+            globalAnggotaList[index].role = newRole;
+        }
+        
+        selectedAnggota.role = newRole;
+
+        showToast(`✅ Role ${selectedAnggota.keanggotaan} berhasil diubah menjadi: ${newRole}.`, false);
+        tutupRoleEditModal();
+        
+        checkExistingLoanAndDisplayModal(selectedAnggota);
+    })
+    .catch(error => {
+        showToast(`❌ Gagal menyimpan Role: ${error.message}`, true);
+    });
+}
+
+// --- FUNGSI AUTOSUGGEST & NAVIGASI (SAMA DENGAN SEBELUMNYA) ---
+
+function getSearchableAnggotaText(d) {
+    return `${d.nis || ''} ${d.keanggotaan || ''} ${d.institusi || ''} ${d.role || ''} ${d.kamarSantri || ''}`.toLowerCase();
+}
+
+function setActiveItem(listElement, index) {
+    const items = listElement.querySelectorAll('.autocomplete-item');
+    items.forEach((item, i) => {
+        item.classList.remove('active');
+        if (i === index) {
+            item.classList.add('active');
+            item.scrollIntoView({ block: 'nearest' });
+        }
+    });
+}
+
+function handleAnggotaAutocomplete() {
+    const query = inputAnggota.value.toLowerCase().trim();
+    listAnggota.innerHTML = '';
+    listAnggota.classList.add('hidden');
+    activeIndex = -1; 
+    currentAutocompleteList = [];
+
+    if (query.length < MIN_CHARS_FOR_SUGGEST) return;
+    
+    const matchedList = globalAnggotaList.filter(anggota => {
+        const searchableText = anggota._searchableText || getSearchableAnggotaText(anggota);
+        anggota._searchableText = searchableText; 
+        return searchableText.includes(query);
+    }).slice(0, 10);
+    
+    if (matchedList.length === 0) return;
+    
+    currentAutocompleteList = matchedList; // Simpan daftar yang ditampilkan
+    listAnggota.classList.remove('hidden');
+    
+    matchedList.forEach((anggota, index) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'autocomplete-item';
+        const nameHighlight = highlightMatch(anggota.keanggotaan || '[NAMA KOSONG]', query);
+        const nisHighlight = highlightMatch(anggota.nis || '-', query);
+        
+        itemDiv.innerHTML = `<p class="font-bold">${nameHighlight}</p><p class="text-xs text-gray-500">ID: ${nisHighlight} | Role: ${anggota.role || 'Hanya Data'} | Kamar: ${anggota.kamarSantri || '-'}</p>`;
+        
+        itemDiv.addEventListener('mousedown', (e) => {
+            e.preventDefault(); 
+            tampilkanModalTransaksi(anggota);
+        });
+        
+        listAnggota.appendChild(itemDiv);
+    });
+}
+
+function handleAnggotaKeydown(e) {
+    const items = listAnggota.querySelectorAll('.autocomplete-item');
+    if (items.length === 0) {
+        if (e.key === 'Enter') {
+            e.preventDefault(); 
+            findAnggotaByNisAndOpenModal();
+        }
+        return;
+    }
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIndex = (activeIndex < items.length - 1) ? activeIndex + 1 : 0;
+        setActiveItem(listAnggota, activeIndex);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIndex = (activeIndex > 0) ? activeIndex - 1 : items.length - 1;
+        setActiveItem(listAnggota, activeIndex);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (activeIndex > -1) {
+            tampilkanModalTransaksi(currentAutocompleteList[activeIndex]);
+        } else {
+             findAnggotaByNisAndOpenModal();
+        }
+    }
+}
+
+
+function getSearchableBiblioText(biblio) {
+    const kodeEkslempar = Array.isArray(biblio.kode) ? biblio.kode : [];
+    const kodeDisplay = kodeEkslempar.join(' ');
+    return `${biblio.judul || ''} ${biblio.penulis || ''} ${kodeDisplay || ''} ${biblio.nomor_panggil || ''} ${biblio.lokasi_rak || ''}`.toLowerCase();
+}
+
+function handleBukuAutocomplete() {
+    const query = inputBuku.value.toLowerCase().trim();
+    listBuku.innerHTML = '';
+    listBuku.classList.add('hidden');
+    activeIndex = -1;
+    currentAutocompleteList = [];
+    selectedBuku = null;
+    selectedEkslemparKode = null;
+    infoBuku.textContent = '';
+    updatePinjamButton();
+    
+    if (query.length < MIN_CHARS_FOR_SUGGEST) return;
+    
+    const matchedList = globalBiblioList.filter(biblio => {
+        const searchableText = biblio._searchableText || getSearchableBiblioText(biblio);
+        biblio._searchableText = searchableText; 
+        return searchableText.includes(query);
+    }).slice(0, 10);
+
+    if (matchedList.length === 0) return;
+    
+    currentAutocompleteList = matchedList; 
+    listBuku.classList.remove('hidden');
+    
+    matchedList.forEach((biblio, index) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'autocomplete-item';
+        const titleHighlight = highlightMatch(biblio.judul || '[JUDUL KOSONG]', query);
+        const kodeEkslempar = Array.isArray(biblio.kode) ? biblio.kode.join(', ') : '-';
+        
+        itemDiv.innerHTML = `<p class="font-bold">${titleHighlight}</p><p class="text-xs text-blue-600">Kode Ekslempar: ${kodeEkslempar}</p>`;
+        
+        itemDiv.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            selectBuku(biblio);
+        });
+        listBuku.appendChild(itemDiv);
+    });
+}
+
+function handleBukuKeydown(e) {
+    const items = listBuku.querySelectorAll('.autocomplete-item');
+    if (items.length === 0) {
+         if (e.key === 'Enter') {
+            e.preventDefault(); 
+            handleBukuEnterPress(); 
+        }
+        return;
+    }
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIndex = (activeIndex < items.length - 1) ? activeIndex + 1 : 0;
+        setActiveItem(listBuku, activeIndex);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIndex = (activeIndex > 0) ? activeIndex - 1 : items.length - 1;
+        setActiveItem(listBuku, activeIndex);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (activeIndex > -1) {
+            const selectedBiblio = currentAutocompleteList[activeIndex];
+            selectBuku(selectedBiblio);
+            
+            setTimeout(() => {
+                if (selectedEkslemparKode) {
+                    handlePinjam(); 
+                } else {
+                    inputBuku.focus(); 
+                }
+            }, 100); 
+
+        } else {
+             handleBukuEnterPress();
+        }
+    }
+}
+
+
+async function findAnggotaByNisAndOpenModal() {
+    const query = inputAnggota.value.trim();
+    if (!query) return;
+
+    const foundAnggota = globalAnggotaList.find(a => String(a.nis).trim().toLowerCase() === query.toLowerCase());
+
+    if (foundAnggota) {
+        listAnggota.classList.add('hidden'); 
+        tampilkanModalTransaksi(foundAnggota);
+    } else {
+        showToast("❌ ID Anggota tidak ditemukan. Coba lagi.", true);
+        inputAnggota.value = ''; 
+    }
+}
+
+
+async function checkExistingLoanAndDisplayModal(anggota) {
+    resetFormBuku(); 
+    currentLoanInfo.classList.add('hidden');
+    loanSection.classList.add('hidden'); 
+    activeLoanDocId = null;
+    
+    const updatedAnggota = globalAnggotaList.find(a => a.nis === anggota.nis) || anggota;
+    selectedAnggota = updatedAnggota; 
+    
+    const role = updatedAnggota.role || 'Hanya Data';
+    const durasi = loanDurationSettings[role];
+    const tglKembali = getDueDate(durasi);
+
+    modalAnggotaNama.textContent = updatedAnggota.keanggotaan;
+    modalAnggotaNis.textContent = updatedAnggota.nis;
+    modalAnggotaRole.textContent = role;
+    modalAnggotaKamar.textContent = updatedAnggota.kamarSantri || '-'; 
+    
+    loanDueDate.innerHTML = ''; 
+    loanBookLocation.textContent = ''; 
+
+
+    if (durasi === 0 || durasi === undefined) {
+        modalInfoPinjam.innerHTML = `⚠️ Role (${role}) TIDAK DIIZINKAN meminjam.`;
+        infoAnggota.innerHTML = `<span class="font-bold text-red-600">ID: ${updatedAnggota.nis} - ${updatedAnggota.keanggotaan}</span>. TIDAK DIIZINKAN PINJAM.`;
+        loanModal.style.display = 'flex';
+        return;
+    } else {
+        modalInfoPinjam.innerHTML = `Durasi Pinjam Maks: ${durasi} Hari. Jika pinjam baru, Tgl Kembali: <span class="font-bold">${tglKembali}</span>.`;
+        infoAnggota.innerHTML = `<span class="font-bold text-primary-text">Anggota ${updatedAnggota.keanggotaan} Dipilih.</span> Memuat status pinjaman...`;
+
+        try {
+            const snapshot = await db.collection(PATH_TRANSAKSI)
+                                    .where('anggota_id', '==', updatedAnggota.nis)
+                                    .where('status', '==', 'Dipinjam')
+                                    .limit(1)
+                                    .get();
+
+            if (snapshot.size > 0) {
+                const loanDoc = snapshot.docs[0];
+                const loan = loanDoc.data();
+                activeLoanDocId = loanDoc.id; 
+                
+                const { daysLate, fineAmount } = calculateLateFine(loan.tgl_kembali_due, dailyFineAmount); 
+
+                loanBookTitle.textContent = loan.biblio_judul;
+                loanBookCode.textContent = `Kode Ekslempar: ${loan.ekslempar_kode}`;
+                currentLoanInfo.classList.remove('hidden');
+
+                loanBookLocation.textContent = loan.biblio_lokasi_rak || 'N/A'; 
+
+                if (fineAmount > 0) {
+                    const fineText = `Terlambat ${daysLate} Hari. Total Denda: Rp ${fineAmount.toLocaleString('id-ID')}.`;
+                    loanDueDate.innerHTML = `<span class="font-bold text-red-300">${loan.tgl_kembali_due}</span> (<span class="font-extrabold text-yellow-200">⚠️ ${fineText}</span>)`; 
+                    btnKembalikan.setAttribute('data-fine-amount', fineAmount);
+                    btnKembalikan.setAttribute('data-days-late', daysLate);
+                } else {
+                    loanDueDate.innerHTML = `<span class="font-bold text-green-300">${loan.tgl_kembali_due}</span> (Belum Terlambat)`;
+                    btnKembalikan.removeAttribute('data-fine-amount');
+                    btnKembalikan.removeAttribute('data-days-late');
+                }
+                
+                loanSection.classList.add('hidden');
+                infoAnggota.innerHTML = `<span class="font-bold text-red-600">Anggota ${updatedAnggota.keanggotaan} sedang meminjam ${loan.biblio_judul}.</span> Kelola di modal.`;
+            } else {
+                currentLoanInfo.classList.add('hidden');
+                loanSection.classList.remove('hidden');
+                inputBuku.focus();
+                infoAnggota.innerHTML = `<span class="font-bold text-primary-text">Anggota ${updatedAnggota.keanggotaan} Dipilih.</span> Siap untuk pinjaman baru.`;
+            }
+
+        } catch (error) {
+            console.error("Error cek pinjaman aktif:", error);
+            showToast("Gagal mengecek status pinjaman aktif.", true);
+            loanSection.classList.add('hidden');
+        }
+    }
+    
+    loanModal.style.display = 'flex';
+}
+
+function tampilkanModalTransaksi(anggota) {
+    inputAnggota.value = anggota.keanggotaan;
+    listAnggota.classList.add('hidden');
+    checkExistingLoanAndDisplayModal(anggota);
+}
+
+
+async function selectBuku(biblio) {
+    selectedBuku = biblio;
+    inputBuku.value = biblio.judul;
+    listBuku.classList.add('hidden');
+
+    const allCodes = biblio.kode || []; 
+    const lokasiRakBiblio = biblio.lokasi_rak || 'N/A'; 
+    
+    if (allCodes.length === 0) {
+        selectedEkslemparKode = null;
+        infoBuku.innerHTML = `<span class="font-bold text-red-600">Dipilih: ${biblio.judul}</span>. Rak Biblio: ${lokasiRakBiblio}. <span class="font-bold">TIDAK ADA KODE EKSLEMPAR TERSEDIA</span>.`;
+        updatePinjamButton();
+        return;
+    }
+    
+    try {
+        const activeLoansSnapshot = await db.collection(PATH_TRANSAKSI)
+                                        .where('ekslempar_kode', 'in', allCodes)
+                                        .where('status', '==', 'Dipinjam')
+                                        .get();
+        
+        const borrowedCodes = new Set(activeLoansSnapshot.docs.map(doc => doc.data().ekslempar_kode));
+        const availableCodes = allCodes.filter(code => !borrowedCodes.has(code));
+
+        if (availableCodes.length > 0) {
+            selectedEkslemparKode = availableCodes[0]; 
+            
+            const ekslemparData = globalEkslemparMap.get(selectedEkslemparKode);
+            const copyLokasiRak = ekslemparData ? (ekslemparData.lokasi_rak || lokasiRakBiblio) : lokasiRakBiblio;
+            
+            infoBuku.innerHTML = `<span class="font-bold text-green-700">Dipilih: ${biblio.judul}</span>. Rak: ${copyLokasiRak}. Kode Pinjam: <span class="font-bold">${selectedEkslemparKode}</span>. (${availableCodes.length} dari ${allCodes.length} tersedia).`;
+        } else {
+            selectedEkslemparKode = null;
+            infoBuku.innerHTML = `<span class="font-bold text-red-600">Dipilih: ${biblio.judul}</span>. Rak Biblio: ${lokasiRakBiblio}. Semua ${allCodes.length} ekslempar sedang dipinjam.`;
+        }
+    } catch (error) {
+        console.error("Error cek ketersediaan ekslempar:", error);
+        infoBuku.innerHTML = `<span class="font-bold text-red-600">Gagal cek ketersediaan: ${error.message}</span>`;
+        selectedEkslemparKode = null;
+    }
+    
+    updatePinjamButton();
+}
+
+async function handleBukuEnterPress() {
+    const ekslemparCode = inputBuku.value.trim();
+    if (!ekslemparCode) return;
+    
+    listBuku.classList.add('hidden'); 
+    infoBuku.textContent = `Memeriksa Kode Ekslempar: ${ekslemparCode}...`;
+
+    const foundBiblio = globalBiblioList.find(biblio => {
+        const codes = Array.isArray(biblio.kode) ? biblio.kode.map(c => String(c).trim().toLowerCase()) : [];
+        return codes.includes(ekslemparCode.toLowerCase());
+    });
+
+    if (!foundBiblio) {
+        infoBuku.textContent = '';
+        showToast(`❌ Kode Ekslempar "${ekslemparCode}" tidak ditemukan di bibliografi manapun.`, true);
+        return;
+    }
+    
+    try {
+        const activeLoanSnapshot = await db.collection(PATH_TRANSAKSI)
+                                            .where('ekslempar_kode', '==', ekslemparCode)
+                                            .where('status', '==', 'Dipinjam')
+                                            .limit(1)
+                                            .get();
+        
+        if (activeLoanSnapshot.size > 0) {
+            infoBuku.textContent = '';
+            showToast(`⚠️ Ekslempar (${ekslemparCode}) sedang dipinjam oleh anggota lain.`, true);
+            return;
+        }
+
+        selectedBuku = foundBiblio; 
+        selectedEkslemparKode = ekslemparCode;
+        
+        infoBuku.innerHTML = `<span class="font-bold text-green-700">Kode: ${ekslemparCode} tersedia.</span> Konfirmasi Pinjam otomatis...`;
+        
+        updatePinjamButton(); 
+        
+        handlePinjam(); 
+
+    } catch (error) {
+        console.error("Error cek ketersediaan ekslempar saat Enter:", error);
+        infoBuku.textContent = '';
+        showToast(`❌ Gagal cek ketersediaan: ${error.message}`, true);
+    }
+}
+
+
+function handlePinjam() {
+    if (!selectedAnggota || !selectedBuku || !selectedEkslemparKode) {
+        showToast("Terjadi kesalahan. Anggota, Buku, atau Kode Ekslempar tidak valid.", true);
+        return;
+    }
+
+    btnPinjam.disabled = true;
+    
+    const role = selectedAnggota.role || 'Hanya Data';
+    const durasi = loanDurationSettings[role];
+    const tglKembali = getDueDate(durasi);
+    const tglPinjam = getDueDate(0);
+    
+    const ekslemparData = globalEkslemparMap.get(selectedEkslemparKode);
+    const lokasiRakPinjam = ekslemparData 
+        ? (ekslemparData.lokasi_rak || selectedBuku.lokasi_rak || 'N/A') 
+        : (selectedBuku.lokasi_rak || 'N/A');
+
+    const transaksiData = {
+        anggota_id: selectedAnggota.nis,
+        anggota_nama: selectedAnggota.keanggotaan,
+        anggota_role: role,
+        
+        biblio_id: selectedBuku.id,
+        biblio_judul: selectedBuku.judul,
+        ekslempar_kode: selectedEkslemparKode,
+        biblio_lokasi_rak: lokasiRakPinjam, 
+        biblio_nomor_panggil: selectedBuku.nomor_panggil || 'N/A', 
+        
+        tgl_pinjam: tglPinjam,
+        tgl_kembali_due: tglKembali,
+        tgl_kembali_aktual: null, 
+        
+        status: 'Dipinjam',
+        durasi_pinjam_hari: durasi,
+        denda_terlambat: 0,
+        hari_terlambat: 0
+    };
+
+    db.collection(PATH_TRANSAKSI).add(transaksiData)
+        .then(() => {
+            showToast(`✅ Pinjam Berhasil! Kode ${selectedEkslemparKode} ke ${selectedAnggota.keanggotaan}. Tgl Kembali: ${tglKembali}.`, false);
+            checkExistingLoanAndDisplayModal(selectedAnggota); 
+        })
+        .catch(error => {
+            showToast(`❌ Gagal Transaksi: ${error.message}`, true);
+            btnPinjam.disabled = false;
+        });
+}
+
+
+function tutupReturnConfirmModal() {
+    returnConfirmModal.style.display = 'none';
+    loanModal.focus(); 
+}
+
+function tampilkanKembalikanConfirmModal() {
+    if (!activeLoanDocId) {
+        showToast("Tidak ada pinjaman aktif yang dapat dikembalikan.", true);
+        return;
+    }
+    
+    const fineAmount = parseInt(btnKembalikan.getAttribute('data-fine-amount')) || 0;
+    const daysLate = parseInt(btnKembalikan.getAttribute('data-days-late')) || 0;
+
+    if (fineAmount > 0) {
+        returnFineInfo.classList.remove('hidden');
+        returnFineInfo.innerHTML = `⚠️ Terlambat ${daysLate} Hari.<br>Total Denda: <span class="font-extrabold">Rp ${fineAmount.toLocaleString('id-ID')}</span>.`;
+    } else {
+        returnFineInfo.classList.add('hidden');
+    }
+
+    returnConfirmModal.style.display = 'flex';
+    setTimeout(() => btnReturnConfirm.focus(), 100); 
+}
+
+function handleKembalikanConfirm() {
+    if (!activeLoanDocId || !selectedAnggota) {
+        tutupReturnConfirmModal();
+        return;
+    }
+
+    const fineAmount = parseInt(btnKembalikan.getAttribute('data-fine-amount')) || 0;
+    const daysLate = parseInt(btnKembalikan.getAttribute('data-days-late')) || 0;
+
+    tutupReturnConfirmModal(); 
+
+    const updateData = {
+        status: 'Dikembalikan',
+        tgl_kembali_aktual: getDueDate(0),
+        denda_terlambat: fineAmount, 
+        hari_terlambat: daysLate     
+    };
+    
+    db.collection(PATH_TRANSAKSI).doc(activeLoanDocId).update(updateData)
+    .then(() => {
+        showToast(`✅ Pengembalian Sukses! ${loanBookTitle.textContent} telah dikembalikan. Denda: Rp ${fineAmount.toLocaleString('id-ID')}.`, false);
+        checkExistingLoanAndDisplayModal(selectedAnggota);
+    })
+    .catch(error => {
+        showToast(`❌ Gagal mengembalikan buku: ${error.message}`, true);
+    });
+}
+
+
+function tutupRenewConfirmModal() {
+    renewConfirmModal.style.display = 'none';
+    loanModal.focus(); 
+}
+
+function tampilkanPerpanjangConfirmModal() {
+    if (!activeLoanDocId || !selectedAnggota) {
+        showToast("Tidak ada pinjaman aktif yang dapat diperpanjang.", true);
+        return;
+    }
+
+    const role = selectedAnggota.role || 'Hanya Data';
+    const durasi = loanDurationSettings[role];
+    
+    if (durasi === 0 || durasi === undefined) {
+        showToast("Anggota ini tidak memiliki durasi pinjaman valid untuk perpanjangan.", true);
+        return;
+    }
+
+    const tglKembaliBaru = getDueDate(durasi); 
+    
+    renewBookTitle.textContent = loanBookTitle.textContent;
+    newDueDateDisplay.textContent = tglKembaliBaru;
+    
+    renewConfirmModal.style.display = 'flex';
+    setTimeout(() => btnRenewConfirm.focus(), 100); 
+}
+
+function handlePerpanjangConfirm() {
+    if (!activeLoanDocId || !selectedAnggota) {
+        tutupRenewConfirmModal();
+        return;
+    }
+
+    const role = selectedAnggota.role || 'Hanya Data';
+    const durasi = loanDurationSettings[role];
+    
+    const tglKembaliBaru = getDueDate(durasi); 
+
+    tutupRenewConfirmModal(); 
+
+    db.collection(PATH_TRANSAKSI).doc(activeLoanDocId).update({
+        tgl_kembali_due: tglKembaliBaru,
+        perpanjangan_terakhir: getDueDate(0) 
+    })
+    .then(() => {
+        showToast(`✅ Perpanjangan Sukses! Tanggal kembali baru: ${tglKembaliBaru}.`, false);
+        checkExistingLoanAndDisplayModal(selectedAnggota); 
+    })
+    .catch(error => {
+        showToast(`❌ Gagal memperpanjang buku: ${error.message}`, true);
+    });
+}
+
+
+function resetFormAnggota() {
+    selectedAnggota = null;
+    activeLoanDocId = null;
+    inputAnggota.value = '';
+    infoAnggota.textContent = '';
+    activeIndex = -1;
+    currentAutocompleteList = [];
+    listAnggota.classList.add('hidden');
+    updatePinjamButton();
+}
+
+function resetFormBuku() {
+    selectedBuku = null;
+    selectedEkslemparKode = null;
+    inputBuku.value = '';
+    infoBuku.textContent = '';
+    activeIndex = -1;
+    currentAutocompleteList = [];
+    listBuku.classList.add('hidden');
+    updatePinjamButton();
+}
+
+
+// ======================================================================
+// INISIALISASI LISTENERS
+// ======================================================================
+
+function initializeListeners() {
+    
+    // 1. Ambil Pengaturan Pinjaman & Denda
+    db.collection('config').doc('loanSettings').get()
+        .then(doc => {
+            if (doc.exists) {
+                const settings = doc.data();
+                loanDurationSettings = { ...settings, 'Hanya Data': 0 };
+                dailyFineAmount = settings.denda_harian !== undefined ? settings.denda_harian : 1000;
+            } else {
+                 loanDurationSettings = { 'Hanya Data': 0 };
+                 dailyFineAmount = 1000;
+                 db.collection('config').doc('loanSettings').set({ denda_harian: 1000 }, { merge: true });
+            }
+        });
+
+    // 2. Ambil Data Anggota
+    db.collection(PATH_ANGGOTA).onSnapshot(snap => {
+        globalAnggotaList = [];
+        snap.forEach(doc => {
+            globalAnggotaList.push({ nis: doc.id, ...doc.data() });
+        });
+    });
+    
+    // 3. Ambil Data Ekslempar
+    db.collection(PATH_EKSEMPLAR).onSnapshot(snap => {
+        globalEkslemparMap.clear();
+        snap.forEach(doc => {
+            const data = doc.data();
+            const code = String(data.kode || doc.id).trim(); 
+            if (code) {
+                globalEkslemparMap.set(code, data); 
+            }
+        });
+    });
+
+    // 4. Ambil Data Bibliografi
+    db.collection(PATH_BIBLIO).onSnapshot(snap => {
+        globalBiblioList = [];
+        snap.forEach(doc => {
+            globalBiblioList.push({ id: doc.id, ...doc.data() });
+        });
+    });
+
+    // 5. Tambahkan Event Listeners
+    inputAnggota.addEventListener('input', handleAnggotaAutocomplete);
+    inputAnggota.addEventListener('keydown', handleAnggotaKeydown); 
+
+    inputBuku.addEventListener('input', handleBukuAutocomplete);
+    inputBuku.addEventListener('keydown', handleBukuKeydown);
+    
+    btnPinjam.addEventListener('click', handlePinjam);
+    btnSaveNewDueDate.addEventListener('click', handleAutosaveDueDate);
+    
+    // Listener Keydown Global untuk Modal Konfirmasi & Role 
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            if (returnConfirmModal.style.display === 'flex') {
+                e.preventDefault();
+                handleKembalikanConfirm();
+            } else if (renewConfirmModal.style.display === 'flex') {
+                e.preventDefault();
+                handlePerpanjangConfirm();
+            } else if (roleEditModal.style.display === 'flex') {
+                e.preventDefault();
+                simpanRoleAnggota();
+            }
+        } else if (e.key === 'Escape') {
+             if (returnConfirmModal.style.display === 'flex') {
+                tutupReturnConfirmModal();
+            } else if (renewConfirmModal.style.display === 'flex') {
+                tutupRenewConfirmModal();
+            } else if (roleEditModal.style.display === 'flex') {
+                tutupRoleEditModal();
+            }
+        }
+    });
+
+    // Tutup modal saat klik di luar area modal content
+    window.onclick = function(event) {
+        if (event.target == loanModal || event.target == configModal || event.target == customDateModal || event.target == returnConfirmModal || event.target == renewConfirmModal || event.target == roleEditModal) {
+            if (event.target == loanModal) {
+                tutupModal();
+            } else if (event.target == configModal) {
+                tutupConfigModal();
+            } else if (event.target == customDateModal) {
+                tutupCustomDateModal();
+            } else if (event.target == returnConfirmModal) {
+                tutupReturnConfirmModal();
+            } else if (event.target == renewConfirmModal) {
+                tutupRenewConfirmModal();
+            } else if (event.target == roleEditModal) {
+                tutupRoleEditModal();
+            }
+        }
+    }
+}
+
+window.onload = initializeListeners;
+</script>
+</body>
+</html>
