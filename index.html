@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Manajemen Perpustakaan</title>
+    
+    <link rel="icon" type="image/png" href="logo.png">
+
+    <style>
+        /* Pengaturan Dasar & Variabel */
+        html, body {
+            height: 100%;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+            margin: 0;
+            padding: 0;
+            background-color: #f7f9fc; 
+            color: #333;
+            overflow: hidden; 
+        }
+        
+        :root {
+            /* Definisi Gradasi Hijau-Biru */
+            --primary-gradient: linear-gradient(90deg, #1abc9c, #3498db); 
+            
+            --transparent-gradient: linear-gradient(135deg, rgba(52, 152, 219, 0.7), rgba(26, 188, 156, 0.7)); 
+            --accent-color: #ffffff;
+            --soft-bg: #ffffff;
+            --text-color-light: white; 
+            --border-color: #e9ecef; 
+            --sidebar-width: 240px; 
+            --box-shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.05); 
+            --image-url: url('https://www.nahdliyin.com/images/post/content/1/2023/2023-02-02/0773fcaee1bbbcad0164bf9a3ba448e2.jpg');
+        }
+
+        /* Layout Utama */
+        .page-wrapper {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* SIDEBAR (Background Image + Transparent Gradient) */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-image: var(--transparent-gradient), var(--image-url);
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
+            
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3); 
+            overflow-y: auto; 
+            position: fixed; 
+            top: 0; 
+            bottom: 0;
+            z-index: 1000;
+        }
+        
+        /* Navigasi Horizontal Beranda/Data */
+        .sidebar-nav-top {
+            display: flex; 
+            justify-content: space-around; 
+            padding: 0;
+            margin-bottom: 5px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2); 
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); 
+        }
+        .nav-tab {
+            flex-grow: 1;
+            text-align: center;
+            text-decoration: none;
+            padding: 15px 0;
+            color: var(--text-color-light); 
+            font-weight: 500;
+            transition: background-color 0.2s, color 0.2s, border-bottom 0.2s;
+            border-bottom: 3px solid transparent; 
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .nav-tab:hover {
+            background-color: rgba(255, 255, 255, 0.1); 
+        }
+        
+        /* PERBAIKAN 1: Tab Navigasi Atas Aktif */
+        .nav-tab.active {
+            background-color: white; 
+            font-weight: 700;
+            
+            /* Gunakan gradasi pada teks */
+            background-image: var(--primary-gradient);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            
+            /* Tetapkan warna fallback */
+            color: #3498db; 
+            
+            /* Tambahkan garis bottom gradasi untuk aksen */
+            border-bottom: 3px solid #1abc9c; 
+        }
+
+        /* Judul Menu */
+        .sidebar h3 {
+            color: rgba(255, 255, 255, 0.7); 
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            padding: 10px 30px 5px;
+            margin-top: 20px;
+            font-weight: 500;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Tautan Sidebar Menu */
+        .sidebar a {
+            display: block;
+            padding: 12px 30px;
+            text-decoration: none;
+            color: var(--text-color-light); 
+            /* Tambahkan posisi agar gradasi teks berfungsi optimal */
+            position: relative; 
+            z-index: 1; 
+            border-left: 4px solid transparent;
+            transition: background-color 0.2s, border-left-color 0.2s, color 0.2s;
+            font-size: 15px;
+            font-weight: 400;
+        }
+        .sidebar a:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        /* PERBAIKAN 2: Link Menu Sidebar Aktif */
+        .sidebar a.active {
+            background-color: white; 
+            border-left-color: transparent; 
+            font-weight: 600;
+
+            /* Teks Gradasi Hijau dan Biru */
+            background-image: var(--primary-gradient);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        /* Tambahan: Pastikan teks gradasi pada link aktif tidak terpotong */
+        .sidebar a.active span {
+             display: inline-block;
+        }
+        
+        .hidden {
+            display: none;
+        }
+
+        /* KONTEN UTAMA */
+        .main-content-area {
+            margin-left: var(--sidebar-width); 
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            width: calc(100% - var(--sidebar-width));
+            height: 100vh; 
+            overflow: hidden; 
+            padding: 20px; 
+        }
+        
+        /* Konten Iframe */
+        .content {
+            flex-grow: 1;
+            overflow: hidden; 
+            width: 100%;
+            height: 100%;
+        }
+        #konten-frame {
+            width: 100%;
+            height: 100%;
+            border: 1px solid var(--border-color);
+            border-radius: 12px; 
+            box-shadow: var(--box-shadow-soft);
+            background-color: white;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="page-wrapper">
+
+        <div class="sidebar">
+            <div class="sidebar-nav-top">
+                <a class="nav-tab" id="nav-beranda">Beranda</a>
+                <a class="nav-tab" id="nav-data">Data</a>
+            </div>
+
+            <div class="sidebar-menu" id="menu-beranda">
+                <h3>Transaksi</h3>
+                <a href="daftarpeminjam.html" target="konten-frame"><span>Daftar Peminjam</span></a>
+                <a href="pinjam.html" target="konten-frame"><span>Pinjam Baru</span></a>
+                <a href="daftarketerlambatan.html" target="konten-frame"><span>Daftar Keterlambatan</span></a>
+            </div>
+
+            <div class="sidebar-menu hidden" id="menu-data">
+                <h3>Data Master</h3>
+                <a href="pencarian.html" target="konten-frame"><span>Pencarian</span></a>
+                <a href="daftarbuku.html" target="konten-frame"><span>Daftar Buku</span></a>
+                <a href="keanggotaan.html" target="konten-frame"><span>Keanggotaan</span></a>
+                <h3>Utilitas</h3>
+                <a href="cetaklabel.html" target="konten-frame"><span>Cetak Label</span></a>
+                <a href="cetakbarcode.html" target="konten-frame"><span>Cetak Barcode</span></a>
+            </div>
+        </div>
+
+        <div class="main-content-area">
+            
+            <div class="content">
+                <iframe id="konten-frame" name="konten-frame" src="daftarpeminjam.html"></iframe>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const navBeranda = document.getElementById('nav-beranda');
+        const navData = document.getElementById('nav-data');
+        const menuBeranda = document.getElementById('menu-beranda');
+        const menuData = document.getElementById('menu-data');
+        const iframe = document.getElementById('konten-frame');
+        
+        iframe.onload = () => {
+             // Pastikan selalu memuat ulang link aktif setelah iframe memuat
+             const currentSrc = iframe.contentWindow.location.pathname.split('/').pop();
+             updateSidebarActiveLink(currentSrc);
+        };
+
+        function updateSidebarActiveLink(currentSrc) {
+            document.querySelectorAll('.sidebar .sidebar-menu a').forEach(link => {
+                link.classList.remove('active');
+            });
+            const activeLink = document.querySelector(`.sidebar .sidebar-menu a[href="${currentSrc}"]`);
+            if (activeLink) {
+                activeLink.classList.add('active');
+            }
+        }
+
+        function setActiveNav(activeNav) {
+            navBeranda.classList.remove('active');
+            navData.classList.remove('active');
+            activeNav.classList.add('active');
+            
+            if (activeNav === navBeranda) {
+                menuBeranda.classList.remove('hidden');
+                menuData.classList.add('hidden');
+                // Alihkan ke link aktif pertama di menu Beranda (jika ada)
+                const firstLink = menuBeranda.querySelector('a');
+                if (firstLink) iframe.src = firstLink.getAttribute('href');
+            } else {
+                menuBeranda.classList.add('hidden');
+                menuData.classList.remove('hidden');
+                // Alihkan ke link aktif pertama di menu Data (jika ada)
+                const firstLink = menuData.querySelector('a');
+                if (firstLink) iframe.src = firstLink.getAttribute('href');
+            }
+        }
+
+        navBeranda.addEventListener('click', () => setActiveNav(navBeranda));
+        navData.addEventListener('click', () => setActiveNav(navData));
+        
+        document.querySelectorAll('.sidebar .sidebar-menu a').forEach(link => {
+            link.addEventListener('click', function() {
+                updateSidebarActiveLink(this.getAttribute('href'));
+            });
+        });
+
+        // Inisialisasi tampilan awal
+        setActiveNav(navBeranda);
+        // Panggil updateSidebarActiveLink setelah setActiveNav untuk memastikan link menu di-highlight
+        updateSidebarActiveLink(iframe.getAttribute('src')); 
+    </script>
+</body>
+</html>
