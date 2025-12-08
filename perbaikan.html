@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mode Perbaikan Data</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        /* --- TEMA WARNA CUSTOM (Gradasi Hijau-Biru) --- */
+        :root {
+            --color-gradient-start: #00b894; 
+            --color-gradient-end: #1e90ff; 
+            --color-primary-light: #e0f7fa; 
+            --color-primary-border: #a7f3d0; 
+            --color-primary-text: #0e7490; 
+        }
+
+        .bg-primary-gradient { 
+            background-image: linear-gradient(to right, var(--color-gradient-start), var(--color-gradient-end)); 
+        }
+        .hover\:opacity-90:hover { opacity: 0.9; }
+
+        .text-primary-gradient {
+            background-image: linear-gradient(to right, var(--color-gradient-start), var(--color-gradient-end));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent; 
+            display: inline-block;
+        }
+        
+        .bg-primary { background-color: var(--color-gradient-end); }
+        .text-primary-medium { color: var(--color-primary-text); } 
+        .bg-primary-lighter { background-color: var(--color-primary-border); } 
+
+        .focus\:ring-primary-medium:focus {
+            --tw-ring-color: var(--color-gradient-end); 
+            --tw-ring-opacity: 0.8;
+            outline: none !important;
+            border-color: var(--color-gradient-end);
+        }
+
+        .modal-open { overflow: hidden; }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #a1a1aa; border-radius: 4px; }
+        input[readonly] { background-color: #f8fafc; cursor: not-allowed; }
+        .border-red-500 { border-color: #ef4444 !important; }
+        .border-green-500 { border-color: #10b981 !important; }
+
+        /* Styling tambahan untuk field yang wajib/sedang kosong */
+        .highlight-missing-field {
+            border: 2px solid #ef4444 !important;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.3) !important;
+        }
+
+        /* Utility untuk loading state */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: var(--color-gradient-end);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.5rem;
+            margin: 0.25rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            background-color: #d1fae5; 
+            color: #065f46; 
+        }
+        .tag-remove {
+            margin-left: 0.5rem;
+            cursor: pointer;
+            font-weight: bold;
+            color: #10b981;
+            transition: color 0.1s;
+        }
+        .tag-remove:hover {
+            color: #065f46;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-3"> 
+    <div class="w-full max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-2xl"> 
+        
+        <div class="flex justify-between items-center mb-6 border-b pb-3">
+            <h1 class="text-3xl font-bold text-gray-800 text-left">
+                <span class="text-primary-gradient">🛠️ Mode Perbaikan Data</span>
+            </h1>
+            <a href="daftarbuku.html" class="text-sm text-gray-500 hover:text-primary-medium transition duration-150">
+                Kembali ke Daftar Utama
+            </a>
+        </div>
+
+        <div id="loadingState" class="text-center p-8">
+            <div class="spinner mx-auto mb-4"></div>
+            <p class="text-gray-600 font-semibold" id="loadingMessage">Memuat data dan inisialisasi Firebase...</p>
+        </div>
+        
+        <div id="repairContent" class="hidden">
+            <div class="flex justify-between items-center mb-4 p-3 border-b border-dashed">
+                <h2 class="text-2xl font-semibold text-gray-700">
+                    Dokumen Acak: <span id="currentTitleDisplay" class="text-primary-gradient italic">Memuat...</span>
+                </h2>
+                <span id="completenessScoreDisplay" class="bg-red-100 text-red-800 font-bold py-1 px-3 rounded-full text-sm">
+                    Skor Incomplete: -
+                </span>
+            </div>
+
+            <form id="repairBiblioForm" class="space-y-6">
+                <input type="hidden" id="repairDocId">
+                
+                <fieldset class="border border-primary-border p-4 rounded-xl bg-primary-light"> 
+                    <legend class="text-xl font-semibold px-2"><span class="text-primary-gradient">Data Bibliografi (Wajib Periksa & Lainnya)</span></legend>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                        <div><label for="repairJudul" class="block text-sm font-medium text-gray-700">Judul <span class="text-red-500">*</span></label><input type="text" id="repairJudul" required class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium"></div>
+                        <div><label for="repairPenulis" class="block text-sm font-medium text-gray-700">Penulis</label><input type="text" id="repairPenulis" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium"></div>
+                        
+                        <div><label for="repairEdisi" class="block text-sm font-medium text-gray-700">Edisi</label><input type="text" id="repairEdisi" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium"></div>
+                        <div><label for="repairISBNISSN" class="block text-sm font-medium text-gray-700">ISBN/ISSN</label><input type="text" id="repairISBNISSN" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium"></div>
+                        <div><label for="repairPenerbit" class="block text-sm font-medium text-gray-700">Penerbit</label><input type="text" id="repairPenerbit" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium"></div>
+                        <div><label for="repairTahunTerbit" class="block text-sm font-medium text-gray-700">Tahun Terbit</label><input type="text" id="repairTahunTerbit" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium"></div>
+                        
+                        <div><label for="repairTempatTerbit" class="block text-sm font-medium text-gray-700">Tempat Terbit</label><input type="text" id="repairTempatTerbit" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium"></div>
+                        <div><label for="repairKlasifikasi" class="block text-sm font-medium text-gray-700">Klasifikasi</label><input type="text" id="repairKlasifikasi" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium"></div>
+                        <div><label for="repairNomorPanggil" class="block text-sm font-medium text-gray-700">Nomor Panggil</label><input type="text" id="repairNomorPanggil" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium"></div>
+                        
+                         <div>
+                            <label for="repairSampulUrl" class="block text-sm font-medium text-gray-700">URL Gambar Sampul</label>
+                            <input type="url" id="repairSampulUrl" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium" placeholder="Contoh: https://link-gambar-anda.com/sampul.jpg">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label for="newTopikInput" class="block text-sm font-medium text-gray-700">Topik (Manajemen Tag)</label>
+                            
+                            <div class="flex mt-1">
+                                <input type="text" id="newTopikInput" placeholder="Ketik topik baru..." class="flex-grow p-2 border border-gray-300 rounded-l-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium">
+                                <button type="button" id="addTopikBtn" class="bg-primary-gradient hover:opacity-90 text-white font-medium py-2 px-4 rounded-r-lg transition duration-150">Tambah</button>
+                            </div>
+
+                            <div id="topikTagsContainer" class="flex flex-wrap gap-2 p-2 border border-gray-300 rounded-lg shadow-sm mt-2 min-h-[40px] bg-white">
+                                <span class="text-sm text-gray-500 italic">Tags topik akan muncul di sini.</span>
+                            </div>
+                        </div>
+                        <div class="md:col-span-2">
+                             <label for="repairDeskripsiFisik" class="block text-sm font-medium text-gray-700">Deskripsi Fisik</label>
+                             <textarea id="repairDeskripsiFisik" rows="2" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium"></textarea>
+                        </div>
+
+                        <div class="md:col-span-2">
+                             <label for="repairAbstrak" class="block text-sm font-medium text-gray-700">Abstrak (Isi, jika ada)</label>
+                             <textarea id="repairAbstrak" rows="3" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium"></textarea>
+                        </div>
+                    </div>
+                </fieldset>
+                
+                <fieldset class="border border-primary-border p-4 rounded-xl"> 
+                    <legend class="text-xl font-semibold px-2"><span class="text-primary-gradient">Data Ekslempar (Salinan Fisik)</span></legend>
+                    
+                    <div class="mt-2">
+                        <label class="block text-sm font-medium text-gray-700">Ekslempar yang Terhubung Saat Ini</label>
+                        <div id="ekslemparTagsContainer" class="p-2 border border-gray-200 rounded-lg min-h-[40px] bg-gray-50">
+                            <p class="text-gray-500 text-sm" id="emptyEkslemparMessage">Belum ada Ekslempar terhubung.</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-4">
+                        <label for="newEkslemparCode" class="block text-sm font-medium text-gray-700">Tambahkan Kode Ekslempar Baru (Pisahkan dengan koma atau Enter)</label>
+                        <input type="text" id="newEkslemparCode" placeholder="Cth: L-001, L-002, L-003" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-4 focus:ring-offset-1 focus:ring-primary-medium focus:border-primary-medium">
+                        <p class="text-xs text-gray-500 mt-1">Kode akan otomatis ditambahkan ke daftar Ekslempar buku ini saat disimpan.</p>
+                    </div>
+
+                    <div class="mt-4 flex justify-between items-center">
+                        <p class="text-sm font-medium text-gray-700">Status Total Ekslempar: <span id="ekslemparStatus" class="font-bold text-red-500">Tidak Terhubung</span></p>
+                        <p class="text-xs text-gray-500">Total data Ekslempar unik di DB: <span id="totalEkslemparCount">Memuat...</span></p>
+                    </div>
+                </fieldset>
+
+
+                <p id="repairMessage" class="mt-2 text-sm text-center"></p>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <button type="button" id="skipBtn" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-4 rounded-lg transition duration-150 disabled:opacity-50">
+                        Lewati (Ambil Dokumen Baru)
+                    </button>
+                    <button type="submit" id="saveBtn" class="bg-primary-gradient hover:opacity-90 text-white font-bold py-3 px-4 rounded-lg transition duration-150 disabled:opacity-50">
+                        Simpan & Lanjutkan ke Dokumen Berikutnya
+                    </button>
+                </div>
+
+            </form>
+        </div>
+    </div>
+    
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-[1000] space-y-3 overflow-hidden"></div>
+
+    <script>
+        // 1. KONFIGURASI FIREBASE ANDA (Sama dengan daftarbuku.html)
+        const firebaseConfig = {
+            apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
+            authDomain: "databuku-6385c.firebaseapp.com",
+            databaseURL: "https://databuku-6385c-default-rtdb.firebaseio.com",
+            projectId: "databuku-6385c",
+            storageBucket: "databuku-6385c.firebasestorage.app",
+            messagingSenderId: "844439345466",
+            appId: "1:844439345466:web:fb90dfc8337a96f0621803"
+        };
+
+        // 2. INISIALISASI FIREBASE
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const FieldValue = firebase.firestore.FieldValue;
+        
+        // Konstanta Warna Kustom untuk Toast
+        const TOAST_BG_COLOR = 'var(--color-primary-light)'; 
+        const TOAST_BORDER_COLOR = 'var(--color-primary-border)';
+        const TOAST_TEXT_COLOR = 'var(--color-primary-text)';
+
+        // 3. ELEMEN DOM & GLOBAL DATA
+        const loadingState = document.getElementById('loadingState');
+        const repairContent = document.getElementById('repairContent');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const currentTitleDisplay = document.getElementById('currentTitleDisplay');
+        const completenessScoreDisplay = document.getElementById('completenessScoreDisplay');
+        
+        // Ekslempar Elements
+        const ekslemparStatus = document.getElementById('ekslemparStatus');
+        const ekslemparTagsContainer = document.getElementById('ekslemparTagsContainer');
+        const emptyEkslemparMessage = document.getElementById('emptyEkslemparMessage');
+        const newEkslemparCode = document.getElementById('newEkslemparCode');
+        const totalEkslemparCount = document.getElementById('totalEkslemparCount');
+        
+        // Topik Elements
+        const newTopikInput = document.getElementById('newTopikInput');
+        const addTopikBtn = document.getElementById('addTopikBtn');
+        const topikTagsContainer = document.getElementById('topikTagsContainer');
+
+
+        // Form Fields
+        const repairBiblioForm = document.getElementById('repairBiblioForm');
+        const repairDocId = document.getElementById('repairDocId');
+        const saveBtn = document.getElementById('saveBtn');
+        const skipBtn = document.getElementById('skipBtn');
+        const repairMessage = document.getElementById('repairMessage');
+        const toastContainer = document.getElementById('toastContainer');
+        
+        let globalBiblioList = []; 
+        let globalEkslemparList = []; // Daftar semua kode ekslempar yang sudah ada
+        let currentBiblioData = null; 
+        let currentToastTimeout = null; 
+        let currentTopikTags = []; // Array of topic strings (e.g., ['Fisika', 'Buku Ajar'])
+        
+        // Daftar field yang dianggap WAJIB ADA. Sama dengan yang digunakan di getCompletenessScore
+        const REQUIRED_FIELDS = ['judul', 'penulis', 'penerbit', 'tahun_terbit', 'nomor_panggil'];
+        
+        // --- FUNGSI UTILITY & TOAST NOTIFICATION (Sama dengan daftarbuku.html) ---
+        
+        function showToast(text, isError = false) {
+            toastContainer.innerHTML = '';
+            if (currentToastTimeout) {
+                clearTimeout(currentToastTimeout);
+            }
+            
+            const toast = document.createElement('div');
+            const bgColor = isError ? 'bg-red-100 border-red-500' : `background-color: ${TOAST_BG_COLOR}; border-color: ${TOAST_BORDER_COLOR};`;
+            const textColor = isError ? 'text-red-800' : `color: ${TOAST_TEXT_COLOR};`;
+            const icon = isError ? '⚠️' : '✅';
+            
+            toast.className = `relative max-w-sm w-full p-4 pr-10 rounded-xl border-t-4 shadow-lg flex items-start space-x-2 transition-all duration-500 transform translate-x-full opacity-0`; 
+            toast.style.cssText = `${bgColor} ${textColor} border-width: 4px;`;
+            
+            toast.innerHTML = `<span class="text-xl">${icon}</span><p class="flex-grow text-sm font-medium">${text}</p>`;
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '×';
+            closeBtn.className = 'absolute top-1 right-2 text-2xl font-light hover:text-gray-900 leading-none p-1 transition duration-150';
+            closeBtn.onclick = () => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translate(100%, 0)';
+                clearTimeout(currentToastTimeout);
+                setTimeout(() => toast.remove(), 500); 
+            };
+            
+            toast.appendChild(closeBtn);
+            toastContainer.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '1';
+                toast.style.transform = 'translate(0, 0)';
+            }, 10);
+            
+            currentToastTimeout = setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translate(100%, 0)';
+                setTimeout(() => toast.remove(), 500); 
+            }, 5000);
+        }
+
+        function showMessage(text, isError = false, element = null) {
+            if (element && element.id === 'repairMessage') {
+                element.textContent = text;
+                const colorClass = isError ? 'bg-red-100 text-red-700' : 'bg-primary-light text-primary-medium';
+                element.className = `mt-2 text-sm text-center p-2 rounded font-medium ${colorClass}`;
+            } else {
+                showToast(text, isError);
+            }
+        }
+        
+        // Fungsi untuk menghitung Skor Kelengkapan (Sama dengan daftarbuku.html)
+        function getCompletenessScore(biblio) {
+            let score = 0;
+            
+            // Hapus highlight field sebelum perhitungan ulang
+            REQUIRED_FIELDS.forEach(field => {
+                const elementId = `repair${field.charAt(0).toUpperCase() + field.slice(1)}`;
+                const inputElement = document.getElementById(elementId);
+                if (inputElement) {
+                     inputElement.classList.remove('highlight-missing-field');
+                }
+            });
+
+            REQUIRED_FIELDS.forEach(field => {
+                if (!biblio[field] || String(biblio[field]).trim() === '') {
+                    score += 1; 
+                }
+            });
+            
+            // 2 points if no Ekslempar connected
+            if (!Array.isArray(biblio.kode) || biblio.kode.length === 0) {
+                score += 2;
+            }
+            
+            return score;
+        }
+
+        // --- NEW: FUNGSI UTILITY TOPIK (Dari daftarbuku.html) ---
+        function parseAndCleanTopics(topics) {
+            let combinedString = '';
+            if (Array.isArray(topics)) {
+                combinedString = topics.join('');
+            } else if (typeof topics === 'string') {
+                combinedString = topics;
+            } else {
+                return [];
+            }
+            // Extract content between < and >
+            const regex = /<([^>]+)>/g;
+            const matches = [...combinedString.matchAll(regex)];
+            const cleanTags = matches.map(match => match[1].trim()).filter(t => t.length > 0);
+            return [...new Set(cleanTags)];
+        }
+
+        function renderTopikTags() {
+            topikTagsContainer.innerHTML = ''; 
+            if (currentTopikTags.length === 0) {
+                 topikTagsContainer.innerHTML = '<span class="text-sm text-gray-500 italic">Tags topik akan muncul di sini.</span>';
+                 return;
+            }
+
+            currentTopikTags.forEach(tag => {
+                const tagBox = document.createElement('div');
+                tagBox.className = 'flex items-center bg-primary-lighter text-primary-medium text-sm font-medium px-3 py-1 rounded-lg transition duration-150 shadow-sm';
+                tagBox.innerHTML = `<span class="mr-2">${tag}</span><button type="button" data-tag="${tag}" class="remove-tag-btn text-primary-medium hover:text-red-600 ml-1 leading-none text-lg transition duration-150">&times;</button>`;
+                topikTagsContainer.appendChild(tagBox);
+            });
+            topikTagsContainer.querySelectorAll('.remove-tag-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const tagValue = e.currentTarget.getAttribute('data-tag');
+                    removeTopik(tagValue);
+                });
+            });
+        }
+
+        function addTopik() {
+            let newTopic = newTopikInput.value.trim().replace(/[<>]/g, '');
+            if (newTopic && currentTopikTags.indexOf(newTopic) === -1) {
+                currentTopikTags.push(newTopic);
+                newTopikInput.value = ''; 
+                renderTopikTags(); 
+            } else if (newTopic) {
+                showMessage(`Topik "${newTopic}" sudah ada.`, true);
+            }
+        }
+
+        function removeTopik(tagValue) {
+            currentTopikTags = currentTopikTags.filter(tag => tag !== tagValue);
+            renderTopikTags(); 
+        }
+
+        
+        // --- FUNGSI BARU UNTUK MERENDER & MENGELOLA EKSLEMPAR TAGS (Tidak Berubah) ---
+        
+        function renderEkslempar(kodeArray) {
+            ekslemparTagsContainer.innerHTML = '';
+            
+            if (!Array.isArray(kodeArray) || kodeArray.length === 0) {
+                emptyEkslemparMessage.classList.remove('hidden');
+                ekslemparStatus.textContent = 'Tidak Terhubung (Prioritas Perbaikan)';
+                ekslemparStatus.className = 'font-bold text-red-500';
+                return;
+            }
+            
+            emptyEkslemparMessage.classList.add('hidden');
+            ekslemparStatus.textContent = `${kodeArray.length} Ekslempar Terhubung`;
+            ekslemparStatus.className = 'font-bold text-green-600';
+
+            kodeArray.forEach(kode => {
+                const tag = document.createElement('span');
+                tag.className = 'tag';
+                tag.innerHTML = `${kode}<span class="tag-remove" data-kode="${kode}">×</span>`;
+                ekslemparTagsContainer.appendChild(tag);
+            });
+            
+            ekslemparTagsContainer.querySelectorAll('.tag-remove').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const kodeToRemove = e.target.dataset.kode;
+                    removeEkslemparFromCurrentBiblio(kodeToRemove);
+                });
+            });
+        }
+        
+        function removeEkslemparFromCurrentBiblio(kode) {
+            if (currentBiblioData && currentBiblioData.kode) {
+                const index = currentBiblioData.kode.indexOf(kode);
+                if (index > -1) {
+                    currentBiblioData.kode.splice(index, 1); // Hapus dari array lokal
+                    renderEkslempar(currentBiblioData.kode); // Render ulang
+                    showMessage(`Kode Ekslempar '${kode}' dihapus dari dokumen ini (Perubahan akan disimpan saat tombol 'Simpan' ditekan).`, false);
+                }
+            }
+        }
+
+        function extractNewEkslemparCodes() {
+            const input = newEkslemparCode.value.trim();
+            if (!input) return [];
+
+            let newCodes = input.split(/[\r\n,]+/)
+                                .map(code => code.trim().toUpperCase())
+                                .filter(code => code.length > 0);
+            
+            const existingCodes = currentBiblioData.kode || [];
+            newCodes = [...new Set(newCodes)].filter(code => !existingCodes.includes(code));
+
+            const conflicts = newCodes.filter(code => globalEkslemparList.includes(code));
+            if (conflicts.length > 0) {
+                 showMessage(`❌ Kode Ekslempar ini sudah terdaftar di dokumen lain: ${conflicts.join(', ')}. Harap periksa kode tersebut!`, true);
+                 newCodes = newCodes.filter(code => !conflicts.includes(code));
+            }
+
+            return newCodes;
+        }
+
+        // --- FUNGSI UTAMA UNTUK MEMUAT & MERENDER DATA PERBAIKAN ---
+
+        function highlightRequiredFields(biblio) {
+            REQUIRED_FIELDS.forEach(field => {
+                const elementId = `repair${field.charAt(0).toUpperCase() + field.slice(1)}`;
+                const inputElement = document.getElementById(elementId);
+                
+                if (inputElement) {
+                    if (!biblio[field] || String(biblio[field]).trim() === '') {
+                        inputElement.classList.add('highlight-missing-field');
+                    } else {
+                        inputElement.classList.remove('highlight-missing-field');
+                    }
+                }
+            });
+        }
+
+        function getRandomIncompleteBiblio() {
+            if (globalBiblioList.length === 0) {
+                showMessage("Tidak ada data Bibliografi yang termuat.", true);
+                return null;
+            }
+
+            const incompleteList = globalBiblioList
+                .map(biblio => {
+                    biblio._completenessScore = getCompletenessScore(biblio); 
+                    return biblio;
+                })
+                .filter(biblio => biblio._completenessScore > 0);
+
+            if (incompleteList.length === 0) {
+                showMessage("🎉 Semua dokumen Bibliografi tampaknya sudah lengkap!", false, repairMessage);
+                return null;
+            }
+
+            incompleteList.sort((a, b) => b._completenessScore - a._completenessScore);
+
+            const topN = Math.max(5, Math.ceil(incompleteList.length * 0.2));
+            const topIncomplete = incompleteList.slice(0, topN);
+
+            const randomIndex = Math.floor(Math.random() * topIncomplete.length);
+            
+            return topIncomplete[randomIndex];
+        }
+
+        function loadRandomBiblio() {
+            repairMessage.textContent = '';
+            newEkslemparCode.value = ''; // Bersihkan input ekslempar
+            currentBiblioData = getRandomIncompleteBiblio();
+
+            if (!currentBiblioData) {
+                currentTitleDisplay.textContent = 'Selesai!';
+                saveBtn.disabled = true;
+                skipBtn.disabled = true;
+                return;
+            }
+
+            // --- ISI SEMUA FIELD BARU & LAMA ---
+            repairDocId.value = currentBiblioData.id;
+            document.getElementById('repairJudul').value = currentBiblioData.judul || '';
+            document.getElementById('repairPenulis').value = currentBiblioData.penulis || '';
+            document.getElementById('repairEdisi').value = currentBiblioData.edisi || '';
+            document.getElementById('repairISBNISSN').value = currentBiblioData.isbn_issn || ''; 
+            document.getElementById('repairPenerbit').value = currentBiblioData.penerbit || '';
+            document.getElementById('repairTahunTerbit').value = currentBiblioData.tahun_terbit || '';
+            document.getElementById('repairTempatTerbit').value = currentBiblioData.tempat_terbit || '';
+            document.getElementById('repairKlasifikasi').value = currentBiblioData.klasifikasi || '';
+            document.getElementById('repairNomorPanggil').value = currentBiblioData.nomor_panggil || '';
+            document.getElementById('repairSampulUrl').value = currentBiblioData.sampul_url || '';
+            document.getElementById('repairDeskripsiFisik').value = currentBiblioData.deskripsi_fisik || '';
+            document.getElementById('repairAbstrak').value = currentBiblioData.abstrak || '';
+            
+            // --- LOAD & RENDER TOPIK BARU ---
+            currentTopikTags = parseAndCleanTopics(currentBiblioData.topik);
+            renderTopikTags();
+            
+            // Tampilkan Ekslempar
+            renderEkslempar(currentBiblioData.kode);
+
+            // Tampilkan Info
+            currentTitleDisplay.textContent = currentBiblioData.judul || '[JUDUL KOSONG]';
+            
+            const score = getCompletenessScore(currentBiblioData);
+            completenessScoreDisplay.textContent = `Skor Incomplete: ${score}`;
+            completenessScoreDisplay.className = `font-bold py-1 px-3 rounded-full text-sm ${score >= 3 ? 'bg-red-200 text-red-800' : (score > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800')}`;
+            
+            // Highlight field yang kosong
+            highlightRequiredFields(currentBiblioData);
+
+            saveBtn.disabled = false;
+            skipBtn.disabled = false;
+            
+            showMessage(`Dokumen acak baru termuat. Skor Incomplete: ${score}`, false, repairMessage);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // --- CRUD/LOGIKA SIMPAN KHUSUS MODE PERBAIKAN ---
+
+        repairBiblioForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const docId = repairDocId.value;
+            if (!docId) {
+                loadRandomBiblio(); 
+                return;
+            }
+
+            saveBtn.disabled = true;
+            skipBtn.disabled = true;
+            showMessage("Menyimpan perbaikan data...", false, repairMessage); 
+            
+            const newCodes = extractNewEkslemparCodes();
+            const finalKodeArray = Array.isArray(currentBiblioData.kode) ? [...currentBiblioData.kode, ...newCodes] : newCodes;
+            
+            try {
+                // Convert topic strings back to <tag> format
+                const topikArray = currentTopikTags.map(t => `<${String(t).trim()}>`); 
+
+                // Ambil nilai field yang diubah di mode perbaikan (Mencakup field baru)
+                const updateData = {
+                    judul: document.getElementById('repairJudul').value.trim(),
+                    penulis: document.getElementById('repairPenulis').value.trim(),
+                    edisi: document.getElementById('repairEdisi').value.trim(), // NEW
+                    isbn_issn: document.getElementById('repairISBNISSN').value.trim(), // NEW
+                    penerbit: document.getElementById('repairPenerbit').value.trim(), 
+                    tahun_terbit: document.getElementById('repairTahunTerbit').value.trim(),
+                    tempat_terbit: document.getElementById('repairTempatTerbit').value.trim(), // NEW
+                    klasifikasi: document.getElementById('repairKlasifikasi').value.trim(), // NEW
+                    nomor_panggil: document.getElementById('repairNomorPanggil').value.trim(),
+                    deskripsi_fisik: document.getElementById('repairDeskripsiFisik').value.trim(), // NEW
+                    abstrak: document.getElementById('repairAbstrak').value.trim(),
+                    sampul_url: document.getElementById('repairSampulUrl').value.trim(), // NEW
+                    
+                    // Update array topik dan kode Ekslempar
+                    topik: topikArray,
+                    kode: finalKodeArray,
+                };
+                
+                // 1. Update Dokumen Bibliografi
+                const biblioRef = db.collection('biblio').doc(docId);
+                await biblioRef.update(updateData);
+                
+                // 2. Update/Buat Dokumen Ekslempar untuk setiap kode baru
+                const batch = db.batch();
+                newCodes.forEach(code => {
+                    const ekslemparRef = db.collection('ekslempar').doc(code);
+                    batch.set(ekslemparRef, {
+                        kode: code,
+                        biblio_id: docId,
+                        status: 'tersedia', // Status default
+                        judul: updateData.judul // Tambahkan judul Bibliografi ke Ekslempar
+                    }, { merge: true }); 
+                    
+                    if (!globalEkslemparList.includes(code)) {
+                        globalEkslemparList.push(code);
+                    }
+                });
+                await batch.commit();
+
+                // 3. Update count Ekslempar global
+                totalEkslemparCount.textContent = globalEkslemparList.length;
+
+                showMessage(`✅ Data '${updateData.judul}' berhasil diperbarui, dan ${newCodes.length} Ekslempar baru ditambahkan/diperbarui. Memuat dokumen berikutnya...`, false, repairMessage); 
+                
+                // Hapus data yang sudah diperbaiki dari list lokal sementara
+                globalBiblioList = globalBiblioList.filter(b => b.id !== docId);
+                
+                // Lanjut ke dokumen berikutnya
+                setTimeout(loadRandomBiblio, 500);
+
+            } catch (error) {
+                console.error("Error saat menyimpan perbaikan Bibliografi:", error);
+                showMessage(`❌ Gagal menyimpan: ${error.message}`, true, repairMessage); 
+            } finally {
+                saveBtn.disabled = false;
+                skipBtn.disabled = false;
+            }
+        });
+        
+        skipBtn.addEventListener('click', () => {
+             if (currentBiblioData) {
+                showMessage(`Melewati dokumen '${currentBiblioData.judul}'. Memuat dokumen acak baru...`, true, repairMessage);
+                globalBiblioList = globalBiblioList.filter(b => b.id !== currentBiblioData.id);
+                loadRandomBiblio();
+             }
+        });
+        
+        // Listener untuk Topik Management
+        addTopikBtn.addEventListener('click', addTopik);
+        newTopikInput.addEventListener('keydown', (e) => {
+             if (e.key === 'Enter') {
+                e.preventDefault(); 
+                addTopik();
+             }
+        });
+
+
+        // 4. LOGIKA LISTENER UTAMA (Mengambil Semua Data Bibliografi dan Ekslempar)
+        
+        let biblioLoaded = false;
+        let ekslemparLoaded = false;
+
+        async function fetchBiblioData() {
+            return db.collection('biblio').get().then(snapshot => {
+                globalBiblioList = [];
+                snapshot.forEach(doc => {
+                    const biblioData = { id: doc.id, ...doc.data() };
+                    globalBiblioList.push(biblioData); 
+                });
+                biblioLoaded = true;
+                return globalBiblioList.length;
+            });
+        }
+
+        async function fetchEkslemparData() {
+            return db.collection('ekslempar').get().then(snapshot => {
+                globalEkslemparList = [];
+                snapshot.forEach(doc => {
+                    globalEkslemparList.push(doc.id); 
+                });
+                ekslemparLoaded = true;
+                totalEkslemparCount.textContent = globalEkslemparList.length;
+                return globalEkslemparList.length;
+            });
+        }
+
+        function initializeListeners() {
+            loadingMessage.textContent = "Memuat semua dokumen Bibliografi dan Ekslempar...";
+
+            Promise.all([fetchBiblioData(), fetchEkslemparData()])
+            .then(([biblioCount, ekslemparCount]) => {
+                loadingState.classList.add('hidden');
+                repairContent.classList.remove('hidden');
+                showMessage(`✅ Sinkronisasi Berhasil. ${biblioCount} Biblio dan ${ekslemparCount} Ekslempar termuat.`, false); 
+                
+                // Mulai perbaikan dengan dokumen acak pertama
+                loadRandomBiblio();
+
+            })
+            .catch(error => {
+                 console.error("Error memuat data:", error);
+                 loadingMessage.textContent = `❌ Gagal memuat data: ${error.message}. Cek koneksi Firebase Anda.`;
+                 showMessage(`❌ Gagal koneksi data: ${error.message}`, true); 
+            });
+        }
+        
+        // Listener untuk Input Ekslempar Baru (jika ingin menggunakan Enter untuk memisahkan)
+        newEkslemparCode.addEventListener('keydown', (e) => {
+             if (e.key === 'Enter') {
+                e.preventDefault(); 
+             }
+        });
+
+        // Jalankan listener saat halaman selesai dimuat
+        window.onload = initializeListeners;
+    </script>
+</body>
+</html>
