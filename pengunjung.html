@@ -2,14 +2,17 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Halaman dengan Dua Iframe (Garis Kotak Hanya di Form)</title>
+    <title>Pengunjung</title>
+    
+    <link rel="icon" href="logo.png" type="image/png"> 
+    
     <style>
         /* Mengatur tata letak halaman menggunakan Flexbox */
         body {
             display: flex;
             margin: 0;
             height: 100vh;
-            overflow: hidden;
+            overflow: hidden; 
             font-family: Arial, sans-serif;
         }
 
@@ -18,26 +21,24 @@
             height: 100%;
             box-sizing: border-box;
             background-color: white;
-            border: none; /* Hapus border default */
+            border: none; 
         }
 
-        /* Iframe untuk Pencarian (Kiri, 70% Lebar) */
+        /* Iframe untuk Pencarian (Kiri, 60% Lebar) */
         .iframe-pencarian {
-            flex-grow: 7;
-            width: 70%;
-            /* Opsional: Berikan border minimal di kanan untuk pemisah */
+            /* flex-grow: 6; */ /* Tidak perlu jika menggunakan width */
+            width: 60%; 
             border-right: 1px solid #ddd; 
         }
 
-        /* Iframe untuk Form (Kanan, 30% Lebar) - Garis Luar Kotak Penuh */
+        /* Iframe untuk Form (Kanan, 40% Lebar) - Garis Luar Kotak Penuh */
         .iframe-form {
-            flex-grow: 3;
-            width: 30%;
+            /* flex-grow: 4; */ /* Tidak perlu jika menggunakan width */
+            width: 40%; 
             
-            /* --- Garis luar berbentuk kotak penuh --- */
-            border: 2px solid #333; /* Border tebal di semua sisi (atas, bawah, kiri, kanan) */
-            padding: 5px; /* Tambahkan padding agar konten tidak menempel ke garis */
-            /* -------------------------------------- */
+            /* Garis luar berbentuk kotak penuh */
+            border: 2px solid #333; 
+            padding: 5px; 
         }
     </style>
 </head>
