@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Perpustakaan Lubangsa</title>
+    <link rel="icon" type="image/png" href="logo.png">
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -204,7 +205,6 @@
         const detailModalWrapper = document.getElementById('detailModalWrapper'); 
         const detailModalContent = document.getElementById('detailModalContent'); 
         
-        // Elemen Baru untuk Login
         const mainTitle = document.getElementById('mainTitle');
         const loginModalWrapper = document.getElementById('loginModalWrapper');
         const loginModalContent = document.getElementById('loginModalContent');
@@ -569,7 +569,6 @@
             }, 250); 
         }
 
-        // FUNGSI BARU UNTUK MODAL LOGIN
         function openLoginModal() {
             loginModalWrapper.classList.remove('hidden');
             loginModalWrapper.classList.add('flex');
@@ -595,8 +594,6 @@
                 document.body.classList.remove('modal-open');
             }, 250); 
         }
-        // AKHIR FUNGSI BARU
-
 
         function navDetail(direction) {
             let newIndex = currentSelectedIndex + direction;
