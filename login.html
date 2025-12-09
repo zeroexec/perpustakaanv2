@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hanya Formulir Login Firestore</title>
+    <style>
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .background-container {
+            background-image: url('https://www.nahdliyin.com/images/post/content/1/2023/2023-02-02/0773fcaee1bbbcad0164bf9a3ba448e2.jpg'); 
+            background-size: cover; 
+            background-position: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2; 
+        }
+        .overlay {
+            background-color: rgba(0, 0, 0, 0.65); 
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1; 
+        }
+
+        .login-container {
+            background-color: #ffffff; 
+            padding: 40px;
+            border-radius: 15px; 
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3); 
+            width: 320px;
+            z-index: 1; 
+            animation: fadeIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+        h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2c3e50; 
+            font-weight: 600;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+            font-size: 0.95em;
+        }
+        
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px; 
+            box-sizing: border-box;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            font-size: 1em;
+        }
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            border-color: #2196F3; 
+            box-shadow: 0 0 5px rgba(33, 150, 243, 0.3); 
+            outline: none;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: bold;
+            transition: opacity 0.3s, transform 0.3s;
+            background: linear-gradient(135deg, #2ecc71, #3498db);
+            box-shadow: 0 5px 15px rgba(46, 204, 113, 0.4); 
+        }
+        
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s, visibility 0.5s, transform 0.5s;
+            transform: translateX(100%);
+        }
+
+        .notification.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background-color: #2ecc71; 
+        }
+
+        .notification.error {
+            background-color: #e74c3c; 
+        }
+    </style>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+</head>
+<body>
+
+<div class="background-container">
+    <div class="overlay"></div>
+</div>
+
+<div class="login-container">
+    <h2>Selamat Datang</h2>
+    
+    <form id="loginForm" autocomplete="off">
+        <div class="form-group">
+            <label for="loginUsername">Username</label>
+            <input type="text" id="loginUsername" name="username" autocomplete="off" required autofocus>
+        </div>
+        <div class="form-group">
+            <label for="loginPassword">Password</label>
+            <input type="password" id="loginPassword" name="password" autocomplete="off" required>
+        </div>
+        <button type="submit">Masuk</button>
+    </form>
+    
+</div>
+
+<div id="notification" class="notification"></div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
+        authDomain: "databuku-6385c.firebaseapp.com",
+        projectId: "databuku-6385c",
+        storageBucket: "databuku-6385c.firebasestorage.app",
+        messagingSenderId: "844439345466",
+        appId: "1:844439345466:web:fb90dfc8337a96f0621803"
+    };
+
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
+    const db = firebase.firestore();
+
+    function showNotification(message, type = 'success') {
+        const notificationElement = document.getElementById('notification');
+        notificationElement.textContent = message;
+        notificationElement.className = `notification show ${type}`;
+        
+        setTimeout(() => {
+            notificationElement.className = 'notification';
+        }, 3000);
+    }
+
+    const loginForm = document.getElementById('loginForm');
+    
+    loginForm.addEventListener('submit', async function(event) {
+        event.preventDefault(); 
+
+        const usernameInput = document.getElementById('loginUsername').value;
+        const passwordInput = document.getElementById('loginPassword').value;
+
+        if (!usernameInput || !passwordInput) {
+            showNotification('Username dan Password harus diisi.', 'error');
+            return;
+        }
+
+        try {
+            const usersRef = db.collection('users');
+            const snapshot = await usersRef.where('username', '==', usernameInput).limit(1).get();
+
+            if (snapshot.empty) {
+                showNotification('LOGIN GAGAL: Username tidak ditemukan.', 'error');
+                return;
+            }
+
+            const userData = snapshot.docs[0].data();
+            
+            if (userData.password === passwordInput) {
+                
+                localStorage.setItem('isLoggedIn', 'true');
+                localStorage.setItem('username', usernameInput);
+                
+                showNotification(`LOGIN BERHASIL! Selamat datang, ${usernameInput}. Mengalihkan...`, 'success');
+                loginForm.reset(); 
+                
+                setTimeout(() => {
+                    window.location.href = 'admin.html';
+                }, 1500); 
+                
+            } else {
+                showNotification('LOGIN GAGAL: Password salah.', 'error');
+            }
+
+        } catch (error) {
+            console.error("Error saat login: ", error);
+            showNotification("Terjadi kesalahan sistem saat mencoba login.", 'error');
+        }
+    });
+</script>
+
+</body>
+</html>
