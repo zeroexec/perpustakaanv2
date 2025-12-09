@@ -7,17 +7,19 @@
     
     <link rel="icon" type="image/png" href="logo.png">
 
-    <style>
-        body {
-            visibility: hidden; 
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-        body.loaded {
-            visibility: visible;
-            opacity: 1;
+    <script>
+        const isLoggedIn = localStorage.getItem('isLoggedIn');
+
+        if (isLoggedIn !== 'true') {
+            window.location.href = 'login.html'; 
+            throw new Error('Akses ditolak, mengalihkan ke login.'); 
         }
         
+        const username = localStorage.getItem('username');
+        console.log('User terotentikasi:', username);
+        
+    </script>
+    <style>
         html, body {
             height: 100%;
         }
@@ -176,18 +178,6 @@
             display: none;
         }
     </style>
-
-    <script>
-        const isLoggedIn = localStorage.getItem('isLoggedIn');
-
-        if (isLoggedIn !== 'true') {
-            window.location.href = 'login.html'; 
-            throw new Error('Akses ditolak, mengalihkan ke login.'); 
-        } else {
-            document.body.classList.add('loaded');
-        }
-    </script>
-    
 </head>
 <body>
 
@@ -290,12 +280,12 @@
             
             if (shouldUpdateFrame) {
                  const firstLink = activeNav === navBeranda 
-                    ? menuBeranda.querySelector('a')
-                    : menuData.querySelector('a');
+                     ? menuBeranda.querySelector('a')
+                     : menuData.querySelector('a');
 
                  if (firstLink) {
-                    const frameId = firstLink.getAttribute('data-target-id');
-                    showFrame(frameId);
+                     const frameId = firstLink.getAttribute('data-target-id');
+                     showFrame(frameId);
                  }
             }
         }
