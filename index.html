@@ -3,18 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Katalog Perpustakaan Publik</title>
+    <title>Perpustakaan Lubangsa</title>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-        /* Gaya Kustom dan Animasi */
         body {
             background-color: #f3f4f6;
         }
         
-        /* Background Image dengan Overlay Hitam Transparan */
         .hero-section {
             background-image: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('https://www.nahdliyin.com/images/post/content/1/2023/2023-02-02/0773fcaee1bbbcad0164bf9a3ba448e2.jpg');
             background-size: cover;
@@ -40,7 +38,6 @@
             border-radius: 4px;
         }
         
-        /* 1. ANIMASI FADE IN UNTUK DAFTAR BUKU */
         @keyframes fadeInSlide {
             from {
                 opacity: 0;
@@ -51,13 +48,11 @@
                 transform: translateY(0);
             }
         }
-        /* Kelas untuk item yang baru dimuat */
         .animate-list-item {
             animation: fadeInSlide 0.3s ease-out forwards;
-            opacity: 0; /* Mulai dari tersembunyi */
+            opacity: 0; 
         }
 
-        /* 2. ANIMASI MODAL */
         .modal-transition-bg {
             transition: opacity 0.25s ease;
         }
@@ -70,7 +65,7 @@
 
     <div class="hero-section py-12 px-4 shadow-lg mb-8">
         <div class="max-w-4xl mx-auto text-center space-y-6">
-            <h1 class="text-3xl md:text-5xl font-bold tracking-tight">Katalog Perpustakaan Publik</h1>
+            <h1 class="text-3xl md:text-5xl font-bold tracking-tight cursor-pointer" id="mainTitle">Perpustakaan Lubangsa</h1>
             <p class="text-cyan-100 text-lg">Temukan referensi, buku, dan koleksi ilmu pengetahuan kami.</p>
             
             <div class="relative max-w-2xl mx-auto mt-4">
@@ -97,6 +92,16 @@
         <div id="paginationContainer" class="flex justify-center mt-8"></div>
     </div>
 
+    <div id="loginModalWrapper" class="fixed inset-0 bg-gray-900 bg-opacity-0 hidden items-center justify-center z-50 modal-transition-bg">
+        <div id="loginModalContent" class="w-full h-full bg-white shadow-2xl overflow-hidden flex flex-col relative opacity-0 scale-95 modal-transition-content">
+            <iframe id="loginFrame" src="login.html" class="w-full h-full border-none"></iframe>
+            <button onclick="closeLoginModal()" class="absolute top-4 right-4 text-white bg-red-500 hover:bg-red-600 p-2 rounded-full shadow-lg z-10 transition">
+                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+    </div>
     <div id="detailModalWrapper" class="fixed inset-0 bg-gray-900 bg-opacity-0 hidden items-center justify-center z-50 p-4 modal-transition-bg">
         <div id="detailModalContent" class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col opacity-0 scale-95 modal-transition-content">
             
@@ -179,7 +184,6 @@
         </div>
     </div>
     <script>
-        // --- 1. CONFIG FIREBASE & GLOBAL VARIABLES ---
         const firebaseConfig = {
             apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
             authDomain: "databuku-6385c.firebaseapp.com",
@@ -199,22 +203,24 @@
         const statusMessage = document.getElementById('statusMessage');
         const detailModalWrapper = document.getElementById('detailModalWrapper'); 
         const detailModalContent = document.getElementById('detailModalContent'); 
+        
+        // Elemen Baru untuk Login
+        const mainTitle = document.getElementById('mainTitle');
+        const loginModalWrapper = document.getElementById('loginModalWrapper');
+        const loginModalContent = document.getElementById('loginModalContent');
 
         const DOCUMENTS_PER_PAGE = 10; 
         let currentPage = 1;
         
         let globalBiblioList = [];
         let currentDisplayList = [];
-        // Menyimpan data detail ekslempar
         let ekslemparDataMap = new Map(); 
-        // Menyimpan data pinjaman aktif (ekslempar_kode -> loan_data) [BARU]
         let activeLoanMap = new Map(); 
         let isDataLoaded = false;
         let currentSelectedIndex = -1; 
-        const PATH_TRANSAKSI = "transaksi_pinjam"; // Path ke koleksi transaksi
+        const PATH_TRANSAKSI = "transaksi_pinjam"; 
 
         
-        // --- 2. UTILITY FUNCTIONS ---
         function parseTopics(topics) {
             if (Array.isArray(topics)) return topics.map(t => t.replace(/[<>]/g, '').trim());
             return [];
@@ -224,9 +230,7 @@
              return `${biblio.judul || ''} ${biblio.penulis || ''} ${biblio.penerbit || ''} ${cleanTopics.join(' ') || ''} ${biblio.isbn_issn || ''}`.toLowerCase();
         }
 
-        // --- 3. DATA LOGIC (Diperbarui untuk memuat transaksi) ---
         function initializeApp() {
-            // 1. Listener Ekslempar
             db.collection('ekslempar').onSnapshot(snapshot => {
                 ekslemparDataMap.clear();
                 snapshot.forEach(doc => {
@@ -241,18 +245,15 @@
                 }
             });
 
-            // 2. Listener Transaksi Pinjaman Aktif (Status 'Dipinjam') [BARU]
             db.collection(PATH_TRANSAKSI).where('status', '==', 'Dipinjam').onSnapshot(snapshot => {
                 activeLoanMap.clear();
                 snapshot.forEach(doc => {
                     const loan = doc.data();
                     const code = String(loan.ekslempar_kode).trim();
                     if(code) {
-                        // Map ekslempar_kode ke data pinjaman lengkap
                         activeLoanMap.set(code, loan); 
                     }
                 });
-                // Jika data utama sudah dimuat, render ulang untuk update status
                 if (isDataLoaded) {
                     renderCurrentPage(); 
                 }
@@ -261,7 +262,6 @@
             });
 
 
-            // 3. Listener Biblio
             db.collection('biblio').orderBy('judul').onSnapshot(snapshot => {
                 globalBiblioList = [];
                 snapshot.forEach(doc => {
@@ -279,8 +279,6 @@
                 statusMessage.className = "text-sm text-red-200 mt-2";
             });
         }
-
-        // --- 4. SEARCH & PAGINATION LOGIC ---
 
         function handleSearch() {
             const query = filterInput.value.toLowerCase().trim();
@@ -334,9 +332,8 @@
             items.forEach((biblio, indexInPage) => {
                 const biblioCodes = Array.isArray(biblio.kode) ? biblio.kode : [];
                 let totalCopies = biblioCodes.length;
-                let availableCopies = 0; // Hitung yang tersedia
+                let availableCopies = 0; 
 
-                // Hitung ekslempar yang tidak ada di peta pinjaman aktif
                 biblioCodes.forEach(code => {
                     const trimmed = String(code).trim();
                     if (!activeLoanMap.has(trimmed)) { 
@@ -373,9 +370,9 @@
                             <div class="mb-3">${topicBadges} ${remainingTopics}</div>
                             
                             <div class="flex flex-wrap gap-y-1 gap-x-4 text-sm text-gray-500">
-                                <span>${biblio.penerbit ? '📚 ' + biblio.penerbit : ''}</span>
-                                <span>${biblio.tahun_terbit ? '📅 ' + biblio.tahun_terbit : ''}</span>
-                                <span>${biblio.nomor_panggil ? '🔖 ' + biblio.nomor_panggil : ''}</span>
+                                <span>${biblio.penerbit ? '答 ' + biblio.penerbit : ''}</span>
+                                <span>${biblio.tahun_terbit ? '套 ' + biblio.tahun_terbit : ''}</span>
+                                <span>${biblio.nomor_panggil ? '薄 ' + biblio.nomor_panggil : ''}</span>
                             </div>
                         </div>
                     </div>
@@ -397,7 +394,6 @@
         }
 
         function renderPagination(totalPages) {
-            // ... (Fungsi tidak berubah)
             const containers = [paginationContainer, paginationContainerTop];
             
             containers.forEach(container => {
@@ -407,7 +403,6 @@
                 navWrapper.className = 'flex items-center space-x-4';
 
                 if (totalPages > 1) {
-                     // Tombol Random
                      const randomBtn = document.createElement('button');
                      randomBtn.innerHTML = `
                         <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -419,11 +414,9 @@
                      randomBtn.onclick = goToRandomPage; 
                      navWrapper.appendChild(randomBtn);
                 
-                    // Navigasi Utama
                     const nav = document.createElement('nav');
                     nav.className = 'inline-flex rounded-md shadow-sm -space-x-px';
 
-                    // Previous
                     const prev = document.createElement('button');
                     prev.innerHTML = '&larr;';
                     prev.className = `px-3 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium ${currentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'}`;
@@ -431,13 +424,11 @@
                     prev.onclick = () => { currentPage--; prepareAndRenderPage(true); };
                     nav.appendChild(prev);
 
-                    // Info
                     const info = document.createElement('span');
                     info.className = "px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700";
                     info.innerText = `Hal ${currentPage} dari ${totalPages}`;
                     nav.appendChild(info);
 
-                    // Next
                     const next = document.createElement('button');
                     next.innerHTML = '&rarr;';
                     next.className = `px-3 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium ${currentPage === totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'}`;
@@ -453,13 +444,10 @@
         }
 
 
-        // --- 5. MODAL DETAIL LOGIC (Diperbarui untuk status pinjaman) ---
-
         function populateAndShowModal(index) {
             const biblio = currentDisplayList[index];
             currentSelectedIndex = index;
 
-            // --- Pengisian Data Modal ---
             document.getElementById('modalJudul').textContent = biblio.judul || 'Tanpa Judul';
             document.getElementById('modalPenulis').textContent = biblio.penulis ? `Karya: ${biblio.penulis}` : '';
             document.getElementById('modalAbstrak').textContent = biblio.abstrak || 'Tidak ada deskripsi tersedia.';
@@ -470,7 +458,6 @@
             document.getElementById('modalKlasifikasi').textContent = biblio.klasifikasi || '-';
             document.getElementById('modalFisik').textContent = biblio.deskripsi_fisik || '-';
 
-            // Topik
             const topicContainer = document.getElementById('modalTopikContainer');
             topicContainer.innerHTML = '';
             parseTopics(biblio.topik).forEach(tag => {
@@ -480,7 +467,6 @@
                 topicContainer.appendChild(span);
             });
             
-            // Ketersediaan [LOGIKA UTAMA DIPERBARUI DI SINI]
             const listContainer = document.getElementById('modalEkslemparList');
             listContainer.innerHTML = '';
             const biblioCodes = Array.isArray(biblio.kode) ? biblio.kode : [];
@@ -491,17 +477,15 @@
                  listContainer.innerHTML = `<p class="text-sm text-red-500 italic text-center py-4">Tidak ada kode ekslempar terdaftar untuk buku ini.</p>`;
             } else {
                 
-                // Iterasi setiap kode ekslempar
                 biblioCodes.forEach(code => {
                     const trimmedCode = String(code).trim();
-                    const loan = activeLoanMap.get(trimmedCode); // Cek status pinjaman dari peta transaksi
-                    const ekslemparData = ekslemparDataMap.get(trimmedCode) || {}; // Ambil data ekslempar
+                    const loan = activeLoanMap.get(trimmedCode); 
+                    const ekslemparData = ekslemparDataMap.get(trimmedCode) || {}; 
                     const lokasi = ekslemparData.lokasi_rak || 'Resepsionis';
 
                     const el = document.createElement('div');
                     
                     if (loan) {
-                        // KONDISI: DIPINJAM
                         el.className = "p-3 bg-red-100 rounded border border-red-300 shadow-sm";
                         el.innerHTML = `
                             <div class="text-xs font-semibold text-red-700 mb-1 flex items-center">
@@ -521,7 +505,6 @@
                             <div class="text-xs text-gray-500 mt-2 border-t border-red-200 pt-1">Kode Inv: ${trimmedCode} | Lokasi Rak: ${lokasi}</div>
                         `;
                     } else {
-                        // KONDISI: TERSEDIA
                         availableCount++;
                         el.className = "p-3 bg-green-100 rounded border border-green-300 shadow-sm";
                         el.innerHTML = `
@@ -548,13 +531,11 @@
             }
 
 
-            // LOGIKA DISABLE BUTTONS
             const totalItems = currentDisplayList.length;
             document.getElementById('modalPrevButton').disabled = index === 0;
             document.getElementById('modalNextButton').disabled = index === totalItems - 1;
             document.getElementById('modalAcakButton').disabled = totalItems <= 1;
 
-            // Tampilkan konten modal dengan animasi
             detailModalContent.classList.remove('opacity-0', 'scale-95');
             detailModalContent.classList.add('opacity-100', 'scale-100');
         }
@@ -567,22 +548,19 @@
             detailModalWrapper.classList.add('flex');
             document.body.classList.add('modal-open');
 
-            // Timeout pertama untuk transisi latar belakang
             setTimeout(() => {
                 detailModalWrapper.classList.remove('bg-opacity-0');
                 detailModalWrapper.classList.add('bg-opacity-70');
-                populateAndShowModal(index); // Isi dan tampilkan konten
+                populateAndShowModal(index); 
             }, 10); 
         }
 
         function closeDetailModal() {
-            // Animasi menutup modal (konten)
             detailModalWrapper.classList.remove('bg-opacity-70');
             detailModalWrapper.classList.add('bg-opacity-0');
             detailModalContent.classList.remove('opacity-100', 'scale-100');
             detailModalContent.classList.add('opacity-0', 'scale-95');
 
-            // Sembunyikan setelah transisi selesai (250ms sesuai CSS)
             setTimeout(() => {
                 detailModalWrapper.classList.add('hidden');
                 detailModalWrapper.classList.remove('flex');
@@ -591,15 +569,42 @@
             }, 250); 
         }
 
+        // FUNGSI BARU UNTUK MODAL LOGIN
+        function openLoginModal() {
+            loginModalWrapper.classList.remove('hidden');
+            loginModalWrapper.classList.add('flex');
+            document.body.classList.add('modal-open');
+
+            setTimeout(() => {
+                loginModalWrapper.classList.remove('bg-opacity-0');
+                loginModalWrapper.classList.add('bg-opacity-70');
+                loginModalContent.classList.remove('opacity-0', 'scale-95');
+                loginModalContent.classList.add('opacity-100', 'scale-100');
+            }, 10); 
+        }
+
+        function closeLoginModal() {
+            loginModalWrapper.classList.remove('bg-opacity-70');
+            loginModalWrapper.classList.add('bg-opacity-0');
+            loginModalContent.classList.remove('opacity-100', 'scale-100');
+            loginModalContent.classList.add('opacity-0', 'scale-95');
+
+            setTimeout(() => {
+                loginModalWrapper.classList.add('hidden');
+                loginModalWrapper.classList.remove('flex');
+                document.body.classList.remove('modal-open');
+            }, 250); 
+        }
+        // AKHIR FUNGSI BARU
+
+
         function navDetail(direction) {
             let newIndex = currentSelectedIndex + direction;
             if (newIndex >= 0 && newIndex < currentDisplayList.length) {
                 
-                // 1. Sembunyikan konten lama (animasi keluar)
                 detailModalContent.classList.remove('opacity-100', 'scale-100');
                 detailModalContent.classList.add('opacity-0', 'scale-95');
                 
-                // 2. Isi konten baru setelah jeda sangat singkat untuk transisi
                 setTimeout(() => {
                     populateAndShowModal(newIndex);
                 }, 100); 
@@ -615,21 +620,17 @@
                 newIndex = Math.floor(Math.random() * totalItems);
             } while (newIndex === currentSelectedIndex); 
             
-            // 1. Sembunyikan konten lama (animasi keluar)
             detailModalContent.classList.remove('opacity-100', 'scale-100');
             detailModalContent.classList.add('opacity-0', 'scale-95');
             
-            // 2. Isi konten setelah jeda sangat singkat untuk transisi
             setTimeout(() => {
-                // 3. Isi konten dengan data baru
                 populateAndShowModal(newIndex);
             }, 100);
         }
         
-        // --- 6. EVENT LISTENERS ---
         filterInput.addEventListener('keyup', handleSearch);
+        mainTitle.addEventListener('click', openLoginModal);
         
-        // Start App
         window.onload = initializeApp;
 
     </script>
