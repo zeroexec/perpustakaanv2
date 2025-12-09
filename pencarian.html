@@ -14,13 +14,12 @@
             background-color: #f3f4f6;
         }
         
-        /* 💡 PERUBAHAN UTAMA DI SINI: Background Image dengan Overlay Hitam Transparan */
+        /* Background Image dengan Overlay Hitam Transparan */
         .hero-section {
             background-image: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('https://www.nahdliyin.com/images/post/content/1/2023/2023-02-02/0773fcaee1bbbcad0164bf9a3ba448e2.jpg');
             background-size: cover;
             background-position: center;
             color: white;
-            /* Pastikan teks di atas gambar tetap terbaca */
         }
         
         .book-card {
@@ -135,7 +134,7 @@
                     <div class="md:col-span-1">
                         <div class="bg-cyan-50 rounded-xl p-4 border border-cyan-200 h-full">
                             <h3 class="font-bold text-cyan-900 mb-3 flex items-center">
-                                <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                 </svg>
                                 Lokasi & Ketersediaan
@@ -206,9 +205,14 @@
         
         let globalBiblioList = [];
         let currentDisplayList = [];
+        // Menyimpan data detail ekslempar
         let ekslemparDataMap = new Map(); 
+        // Menyimpan data pinjaman aktif (ekslempar_kode -> loan_data) [BARU]
+        let activeLoanMap = new Map(); 
         let isDataLoaded = false;
         let currentSelectedIndex = -1; 
+        const PATH_TRANSAKSI = "transaksi_pinjam"; // Path ke koleksi transaksi
+
         
         // --- 2. UTILITY FUNCTIONS ---
         function parseTopics(topics) {
@@ -220,24 +224,44 @@
              return `${biblio.judul || ''} ${biblio.penulis || ''} ${biblio.penerbit || ''} ${cleanTopics.join(' ') || ''} ${biblio.isbn_issn || ''}`.toLowerCase();
         }
 
-        // --- 3. DATA LOGIC ---
+        // --- 3. DATA LOGIC (Diperbarui untuk memuat transaksi) ---
         function initializeApp() {
+            // 1. Listener Ekslempar
             db.collection('ekslempar').onSnapshot(snapshot => {
                 ekslemparDataMap.clear();
                 snapshot.forEach(doc => {
                     const data = doc.data();
-                    const code = String(data.kode).trim();
+                    const code = String(data.kode || doc.id).trim(); 
                     if(code) {
-                        if (!ekslemparDataMap.has(code)) {
-                            ekslemparDataMap.set(code, []);
-                        }
-                        ekslemparDataMap.get(code).push(data);
+                        ekslemparDataMap.set(code, data); 
                     }
                 });
                 if (isDataLoaded) {
                     renderCurrentPage(); 
                 }
             });
+
+            // 2. Listener Transaksi Pinjaman Aktif (Status 'Dipinjam') [BARU]
+            db.collection(PATH_TRANSAKSI).where('status', '==', 'Dipinjam').onSnapshot(snapshot => {
+                activeLoanMap.clear();
+                snapshot.forEach(doc => {
+                    const loan = doc.data();
+                    const code = String(loan.ekslempar_kode).trim();
+                    if(code) {
+                        // Map ekslempar_kode ke data pinjaman lengkap
+                        activeLoanMap.set(code, loan); 
+                    }
+                });
+                // Jika data utama sudah dimuat, render ulang untuk update status
+                if (isDataLoaded) {
+                    renderCurrentPage(); 
+                }
+            }, error => {
+                console.error("Error memuat transaksi pinjam:", error);
+            });
+
+
+            // 3. Listener Biblio
             db.collection('biblio').orderBy('judul').onSnapshot(snapshot => {
                 globalBiblioList = [];
                 snapshot.forEach(doc => {
@@ -256,7 +280,7 @@
             });
         }
 
-        // --- 4. SEARCH & PAGINATION LOGIC (Dioptimalkan) ---
+        // --- 4. SEARCH & PAGINATION LOGIC ---
 
         function handleSearch() {
             const query = filterInput.value.toLowerCase().trim();
@@ -266,7 +290,6 @@
                 currentDisplayList = globalBiblioList.filter(item => item._searchableText.includes(query));
             }
             currentPage = 1;
-            // Tanpa delay (perbaikan responsivitas)
             prepareAndRenderPage();
         }
 
@@ -276,17 +299,11 @@
             const totalPages = Math.ceil(totalItems / DOCUMENTS_PER_PAGE);
             const newPage = Math.floor(Math.random() * totalPages) + 1;
             currentPage = newPage;
-            // Tanpa delay (perbaikan responsivitas)
             prepareAndRenderPage();
             window.scrollTo(0, 0);
         }
 
-        /**
-         * Fungsi yang diperbarui: Menghapus jeda (setTimeout) agar
-         * pemuatan daftar buku lebih cepat saat search/pindah halaman.
-         */
         function prepareAndRenderPage(scrollToTop = true) {
-            // Render langsung tanpa delay.
             renderCurrentPage();
             if(scrollToTop) window.scrollTo(0, 0);
         }
@@ -312,18 +329,21 @@
             const endIndex = startIndex + DOCUMENTS_PER_PAGE;
             const items = currentDisplayList.slice(startIndex, endIndex);
 
-            dataListContainer.innerHTML = ''; // Kosongkan container
+            dataListContainer.innerHTML = ''; 
             
             items.forEach((biblio, indexInPage) => {
                 const biblioCodes = Array.isArray(biblio.kode) ? biblio.kode : [];
-                let totalCopies = 0;
-                
+                let totalCopies = biblioCodes.length;
+                let availableCopies = 0; // Hitung yang tersedia
+
+                // Hitung ekslempar yang tidak ada di peta pinjaman aktif
                 biblioCodes.forEach(code => {
                     const trimmed = String(code).trim();
-                    if(ekslemparDataMap.has(trimmed)) {
-                        totalCopies += ekslemparDataMap.get(trimmed).length;
+                    if (!activeLoanMap.has(trimmed)) { 
+                        availableCopies++;
                     }
                 });
+
 
                 const topics = parseTopics(biblio.topik);
                 const topicBadges = topics.slice(0, 3).map(t => `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800 mr-1">${t}</span>`).join('');
@@ -337,7 +357,6 @@
                         </div>`;
 
                 const card = document.createElement('div');
-                // Menggunakan delay stagger 50ms untuk animasi masuk
                 card.className = "book-card bg-white rounded-xl p-5 shadow-sm border border-gray-200 flex flex-col md:flex-row gap-5 cursor-pointer hover:border-cyan-300 animate-list-item"; 
                 card.style.animationDelay = `${indexInPage * 0.05}s`; 
                 
@@ -354,16 +373,16 @@
                             <div class="mb-3">${topicBadges} ${remainingTopics}</div>
                             
                             <div class="flex flex-wrap gap-y-1 gap-x-4 text-sm text-gray-500">
-                                <span>${biblio.penerbit ? '🏢 ' + biblio.penerbit : ''}</span>
+                                <span>${biblio.penerbit ? '📚 ' + biblio.penerbit : ''}</span>
                                 <span>${biblio.tahun_terbit ? '📅 ' + biblio.tahun_terbit : ''}</span>
-                                <span>${biblio.nomor_panggil ? '🏷️ ' + biblio.nomor_panggil : ''}</span>
+                                <span>${biblio.nomor_panggil ? '🔖 ' + biblio.nomor_panggil : ''}</span>
                             </div>
                         </div>
                     </div>
 
                     <div class="flex flex-col items-end justify-center min-w-[120px] border-t md:border-t-0 md:border-l border-gray-100 pt-4 md:pt-0 pl-0 md:pl-4 mt-4 md:mt-0">
-                        <span class="text-xs text-gray-500 uppercase tracking-wide">Ketersediaan</span>
-                        <span class="text-2xl font-bold ${totalCopies > 0 ? 'text-green-600' : 'text-red-500'}">${totalCopies}</span>
+                        <span class="text-xs text-gray-500 uppercase tracking-wide">Tersedia / Total</span>
+                        <span class="text-2xl font-bold ${availableCopies > 0 ? 'text-green-600' : 'text-red-500'}">${availableCopies} / ${totalCopies}</span>
                         <span class="text-xs font-medium text-gray-600">Ekslempar</span>
                         <button class="mt-3 text-cyan-700 hover:text-cyan-900 text-sm font-semibold flex items-center group">
                             Lihat Detail 
@@ -378,6 +397,7 @@
         }
 
         function renderPagination(totalPages) {
+            // ... (Fungsi tidak berubah)
             const containers = [paginationContainer, paginationContainerTop];
             
             containers.forEach(container => {
@@ -408,7 +428,6 @@
                     prev.innerHTML = '&larr;';
                     prev.className = `px-3 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium ${currentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'}`;
                     prev.disabled = currentPage === 1;
-                    // Menggunakan prepareAndRenderPage yang dioptimalkan
                     prev.onclick = () => { currentPage--; prepareAndRenderPage(true); };
                     nav.appendChild(prev);
 
@@ -423,7 +442,6 @@
                     next.innerHTML = '&rarr;';
                     next.className = `px-3 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium ${currentPage === totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'}`;
                     next.disabled = currentPage === totalPages;
-                    // Menggunakan prepareAndRenderPage yang dioptimalkan
                     next.onclick = () => { currentPage++; prepareAndRenderPage(true); };
                     nav.appendChild(next);
                     
@@ -434,9 +452,9 @@
             });
         }
 
-        // --- 5. MODAL DETAIL LOGIC (Dioptimalkan) ---
 
-        // Fungsi pembantu untuk membuka modal dengan data baru (Tidak diubah)
+        // --- 5. MODAL DETAIL LOGIC (Diperbarui untuk status pinjaman) ---
+
         function populateAndShowModal(index) {
             const biblio = currentDisplayList[index];
             currentSelectedIndex = index;
@@ -462,30 +480,73 @@
                 topicContainer.appendChild(span);
             });
             
-            // Ketersediaan
+            // Ketersediaan [LOGIKA UTAMA DIPERBARUI DI SINI]
             const listContainer = document.getElementById('modalEkslemparList');
             listContainer.innerHTML = '';
             const biblioCodes = Array.isArray(biblio.kode) ? biblio.kode : [];
-            let stockCount = 0;
-            let foundCopies = [];
-            biblioCodes.forEach(code => {
-                const trimmed = String(code).trim();
-                if(ekslemparDataMap.has(trimmed)) {
-                    ekslemparDataMap.get(trimmed).forEach(copy => foundCopies.push(copy));
-                }
-            });
-            stockCount = foundCopies.length;
-            document.getElementById('modalStokCount').textContent = stockCount;
-            if (stockCount === 0) {
-                listContainer.innerHTML = `<p class="text-sm text-red-500 italic text-center py-4">Maaf, buku ini tidak tersedia di rak saat ini.</p>`;
+            let availableCount = 0;
+
+            if (biblioCodes.length === 0) {
+                 document.getElementById('modalStokCount').textContent = '0';
+                 listContainer.innerHTML = `<p class="text-sm text-red-500 italic text-center py-4">Tidak ada kode ekslempar terdaftar untuk buku ini.</p>`;
             } else {
-                foundCopies.forEach(copy => {
+                
+                // Iterasi setiap kode ekslempar
+                biblioCodes.forEach(code => {
+                    const trimmedCode = String(code).trim();
+                    const loan = activeLoanMap.get(trimmedCode); // Cek status pinjaman dari peta transaksi
+                    const ekslemparData = ekslemparDataMap.get(trimmedCode) || {}; // Ambil data ekslempar
+                    const lokasi = ekslemparData.lokasi_rak || 'Resepsionis';
+
                     const el = document.createElement('div');
-                    el.className = "p-3 bg-white rounded border border-gray-100 shadow-sm flex justify-between items-center";
-                    el.innerHTML = `<div><div class="text-xs text-gray-400">Lokasi Rak</div><div class="text-sm font-bold text-gray-800">${copy.lokasi_rak || 'Resepsionis'}</div></div><div class="text-right"><div class="text-xs text-gray-400">Kode Inv</div><div class="text-xs font-mono bg-gray-100 px-1 rounded">${copy.kode_inventaris || '-'}</div></div>`;
+                    
+                    if (loan) {
+                        // KONDISI: DIPINJAM
+                        el.className = "p-3 bg-red-100 rounded border border-red-300 shadow-sm";
+                        el.innerHTML = `
+                            <div class="text-xs font-semibold text-red-700 mb-1 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                DIPINJAM
+                            </div>
+                            <div class="flex justify-between items-center text-sm">
+                                <div>
+                                    <div class="text-xs text-gray-500">Peminjam</div>
+                                    <div class="font-bold text-gray-800">${loan.anggota_nama || 'Anggota Tidak Diketahui'}</div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-xs text-gray-500">Tgl Kembali (Due)</div>
+                                    <div class="font-bold text-red-600">${loan.tgl_kembali_due || '-'}</div>
+                                </div>
+                            </div>
+                            <div class="text-xs text-gray-500 mt-2 border-t border-red-200 pt-1">Kode Inv: ${trimmedCode} | Lokasi Rak: ${lokasi}</div>
+                        `;
+                    } else {
+                        // KONDISI: TERSEDIA
+                        availableCount++;
+                        el.className = "p-3 bg-green-100 rounded border border-green-300 shadow-sm";
+                        el.innerHTML = `
+                            <div class="text-xs font-semibold text-green-700 mb-1 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                                TERSEDIA
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <div class="text-xs text-gray-500">Lokasi Rak</div>
+                                    <div class="text-sm font-bold text-gray-800">${lokasi}</div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-xs text-gray-500">Kode Inv</div>
+                                    <div class="text-xs font-mono bg-gray-200 px-1 rounded">${trimmedCode}</div>
+                                </div>
+                            </div>
+                        `;
+                    }
                     listContainer.appendChild(el);
                 });
+            
+                document.getElementById('modalStokCount').textContent = availableCount;
             }
+
 
             // LOGIKA DISABLE BUTTONS
             const totalItems = currentDisplayList.length;
@@ -530,9 +591,6 @@
             }, 250); 
         }
 
-        /**
-         * FUNGSI DIPERBAHARUI: Menghilangkan jeda yang disengaja.
-         */
         function navDetail(direction) {
             let newIndex = currentSelectedIndex + direction;
             if (newIndex >= 0 && newIndex < currentDisplayList.length) {
@@ -548,7 +606,6 @@
             }
         }
         
-        // Perbarui fungsi randomDetail agar menggunakan pola transisi yang lebih cepat
         function randomDetail() {
             const totalItems = currentDisplayList.length;
             if (totalItems <= 1) return;
