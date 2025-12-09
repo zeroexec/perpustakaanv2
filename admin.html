@@ -8,6 +8,16 @@
     <link rel="icon" type="image/png" href="logo.png">
 
     <style>
+        body {
+            visibility: hidden; 
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        body.loaded {
+            visibility: visible;
+            opacity: 1;
+        }
+        
         html, body {
             height: 100%;
         }
@@ -166,6 +176,18 @@
             display: none;
         }
     </style>
+
+    <script>
+        const isLoggedIn = localStorage.getItem('isLoggedIn');
+
+        if (isLoggedIn !== 'true') {
+            window.location.href = 'login.html'; 
+            throw new Error('Akses ditolak, mengalihkan ke login.'); 
+        } else {
+            document.body.classList.add('loaded');
+        }
+    </script>
+    
 </head>
 <body>
 
@@ -182,6 +204,8 @@
                 <a href="daftarpeminjam.html" data-target-id="frame-daftarpeminjam"><span>Daftar Peminjam</span></a>
                 <a href="pinjam.html" data-target-id="frame-pinjam"><span>Pinjam Baru</span></a>
                 <a href="daftarketerlambatan.html" data-target-id="frame-daftarketerlambatan"><span>Daftar Keterlambatan</span></a>
+                <h3 style="margin-top: 50px;">Akun</h3>
+                <a href="#" id="logout-link"><span>Logout</span></a>
             </div>
 
             <div class="sidebar-menu hidden" id="menu-data">
@@ -218,6 +242,7 @@
         const menuData = document.getElementById('menu-data');
         const allFrames = document.querySelectorAll('.content-frame');
         const sidebarLinks = document.querySelectorAll('.sidebar .sidebar-menu a');
+        const logoutLink = document.getElementById('logout-link'); 
         
         const defaultFrameId = 'frame-daftarpeminjam'; 
 
@@ -274,6 +299,14 @@
                  }
             }
         }
+        
+        logoutLink.addEventListener('click', function(event) {
+            event.preventDefault(); 
+            localStorage.removeItem('isLoggedIn');
+            localStorage.removeItem('username');
+            window.location.href = 'login.html'; 
+        });
+
 
         sidebarLinks.forEach(link => {
             link.addEventListener('click', function(event) {
@@ -291,7 +324,6 @@
         });
         
         window.onload = () => {
-            // Semua iframe sudah dimuat di HTML, kita hanya perlu memastikan tampilan awal
             showFrame(defaultFrameId);
             setActiveNav(navBeranda, false); 
         };
