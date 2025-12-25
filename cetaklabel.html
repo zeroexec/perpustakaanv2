@@ -9,26 +9,20 @@
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-        /* CSS Khusus untuk Tampilan Cetak */
         @media print {
-            /* Sembunyikan semua elemen kontrol saat mencetak */
             .no-print {
                 display: none !important;
             }
-            /* Pastikan halaman cetak hanya menampilkan label */
             body {
                 margin: 0;
                 padding: 0;
             }
-            /* Tampilkan konten label saja */
             #printArea {
-                /* PERUBAHAN UTAMA: Menggunakan Flexbox untuk tata letak fleksibel */
                 display: flex !important; 
-                flex-wrap: wrap; /* Memungkinkan label pindah ke baris baru */
+                flex-wrap: wrap; 
                 width: 100%;
-                gap: 5px; /* Jarak antar label */
+                gap: 5px; 
             }
-            /* Gaya untuk memotong teks judul jika terlalu panjang */
             .title-truncate {
                 white-space: nowrap;
                 overflow: hidden;
@@ -38,12 +32,11 @@
             }
         }
         
-        /* Style untuk Scrollbar */
         .custom-scrollbar::-webkit-scrollbar {
             width: 8px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-            background-color: #a1a1aa; /* zinc-400 */
+            background-color: #a1a1aa; 
             border-radius: 4px;
         }
     </style>
@@ -62,7 +55,6 @@
         <div class="mb-6 p-4 border border-cyan-200 rounded-lg bg-cyan-50">
             <h2 class="text-xl font-semibold mb-3 text-cyan-700">Pengaturan Label</h2>
             <form id="labelForm" class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-                
                 <div class="sm:col-span-2">
                     <label for="customHeaderName" class="block text-sm font-medium text-gray-700">Nama Perpustakaan (Header)</label>
                     <input type="text" id="customHeaderName" value="Perputakaan Lubangsa" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-cyan-500 focus:border-cyan-500">
@@ -75,7 +67,7 @@
                     </div>
                     <div class="flex items-center">
                         <input id="includeKode" type="checkbox" class="h-4 w-4 text-cyan-600 border-gray-300 rounded">
-                        <label for="includeKode" class="ml-2 block text-sm font-medium text-gray-700">Tampilkan Kode Ekslempar</label>
+                        <label for="includeKode" class="ml-2 block text-sm font-medium text-gray-700">Tampilkan Kode</label>
                     </div>
                 </div>
 
@@ -87,6 +79,18 @@
             </form>
             <p id="message" class="mt-4 text-sm text-red-500"></p>
         </div>
+
+        <div class="mb-4">
+            <div class="relative">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3">
+                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </span>
+                <input type="text" id="searchInput" placeholder="Cari Judul, Kode, atau No Panggil..." 
+                       class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition duration-150">
+            </div>
+        </div>
         
         <div class="mb-4 flex justify-between items-center">
              <h2 class="text-xl font-semibold text-gray-700">Pilih Ekslempar (<span id="totalItems">0</span> Total)</h2>
@@ -94,16 +98,13 @@
         </div>
 
         <div id="ekslemparList" class="space-y-3 max-h-96 overflow-y-auto custom-scrollbar p-2 border rounded-lg">
-            <p class="text-center text-gray-500">Memuat data Ekslempar...</p>
+            <p class="text-center text-gray-500">Memuat data...</p>
         </div>
-        
     </div>
 
-    <div id="printArea" class="hidden">
-        </div>
+    <div id="printArea" class="hidden"></div>
 
     <script>
-        // 1. KONFIGURASI FIREBASE ANDA
         const firebaseConfig = {
             apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
             authDomain: "databuku-6385c.firebaseapp.com",
@@ -114,11 +115,9 @@
             appId: "1:844439345466:web:fb90dfc8337a96f0621803"
         };
 
-        // 2. INISIALISASI FIREBASE
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // 3. ELEMEN DOM & GLOBAL DATA
         const ekslemparListContainer = document.getElementById('ekslemparList');
         const selectedCountDisplay = document.getElementById('selectedCountDisplay');
         const totalItemsDisplay = document.getElementById('totalItems');
@@ -127,12 +126,13 @@
         const labelForm = document.getElementById('labelForm');
         const message = document.getElementById('message');
         const selectAllBtn = document.getElementById('selectAllBtn');
+        const searchInput = document.getElementById('searchInput');
         
-        let allEkslempar = []; // Cache semua data Ekslempar
+        let allEkslempar = []; 
+        let filteredEkslempar = [];
         let selectedEkslemparIds = new Set();
         let isSelectAll = false;
 
-        // --- FUNGSI UTILITY & LOGIKA SELECT ---
         function showMessage(text, isError = false) {
             message.textContent = text;
             message.className = `mt-4 text-sm font-medium ${isError ? 'text-red-600' : 'text-green-600'}`;
@@ -148,23 +148,24 @@
         function toggleSelection(ekslemparId) {
             if (selectedEkslemparIds.has(ekslemparId)) {
                 selectedEkslemparIds.delete(ekslemparId);
-                document.getElementById(`checkbox-${ekslemparId}`).checked = false;
+                const cb = document.getElementById(`checkbox-${ekslemparId}`);
+                if(cb) cb.checked = false;
             } else {
                 selectedEkslemparIds.add(ekslemparId);
-                document.getElementById(`checkbox-${ekslemparId}`).checked = true;
+                const cb = document.getElementById(`checkbox-${ekslemparId}`);
+                if(cb) cb.checked = true;
             }
-            isSelectAll = selectedEkslemparIds.size === allEkslempar.length;
             updateSelectedCount();
         }
         
         function toggleSelectAll() {
             if (isSelectAll) {
-                selectedEkslemparIds.clear();
+                filteredEkslempar.forEach(ekslempar => selectedEkslemparIds.delete(ekslempar.id));
             } else {
-                allEkslempar.forEach(ekslempar => selectedEkslemparIds.add(ekslempar.id));
+                filteredEkslempar.forEach(ekslempar => selectedEkslemparIds.add(ekslempar.id));
             }
             isSelectAll = !isSelectAll;
-            renderEkslemparList(allEkslempar); 
+            renderEkslemparList(filteredEkslempar); 
             updateSelectedCount();
         }
 
@@ -173,7 +174,7 @@
             totalItemsDisplay.textContent = list.length;
             
             if (list.length === 0) {
-                ekslemparListContainer.innerHTML = '<p class="text-center text-gray-500">Tidak ada data Ekslempar yang ditemukan.</p>';
+                ekslemparListContainer.innerHTML = '<p class="text-center text-gray-500">Tidak ada data ditemukan.</p>';
                 return;
             }
 
@@ -182,137 +183,96 @@
                 const itemDiv = document.createElement('div');
                 
                 itemDiv.className = `flex items-center p-3 rounded-lg border cursor-pointer transition-all duration-150 ${isSelected ? 'bg-cyan-100 border-cyan-400 shadow' : 'bg-white border-gray-200 hover:bg-gray-50'}`;
-                itemDiv.setAttribute('data-id', ekslempar.id);
                 itemDiv.onclick = () => toggleSelection(ekslempar.id);
 
                 itemDiv.innerHTML = `
-                    <input type="checkbox" id="checkbox-${ekslempar.id}" ${isSelected ? 'checked' : ''} class="w-5 h-5 text-cyan-600 bg-gray-100 border-gray-300 rounded focus:ring-cyan-500" onclick="event.stopPropagation(); toggleSelection('${ekslempar.id}')">
+                    <input type="checkbox" id="checkbox-${ekslempar.id}" ${isSelected ? 'checked' : ''} class="w-5 h-5 text-cyan-600 bg-gray-100 border-gray-300 rounded" onclick="event.stopPropagation(); toggleSelection('${ekslempar.id}')">
                     <div class="ml-4 flex-grow">
-                        <p class="text-sm font-semibold text-gray-800">${ekslempar.nomor_panggil || 'NO PANGGIL KOSONG'}</p>
-                        <p class="text-xs text-gray-600">Kode Ekslempar: ${ekslempar.kode || '-'}</p>
+                        <p class="text-sm font-semibold text-gray-800">${ekslempar.nomor_panggil || 'NO PANGGIL'}</p>
+                        <p class="text-xs text-gray-600">Kode: ${ekslempar.kode || '-'}</p>
                         <p class="text-xs text-gray-500">Judul: ${ekslempar.judul || '-'}</p>
                     </div>
-                    <div class="text-sm text-cyan-700">${ekslempar.lokasi_rak || 'Rak Kosong'}</div>
                 `;
                 ekslemparListContainer.appendChild(itemDiv);
             });
-            updateSelectedCount();
         }
+
+        searchInput.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            filteredEkslempar = allEkslempar.filter(item => {
+                const judul = String(item.judul || "").toLowerCase();
+                const kode = String(item.kode || "").toLowerCase();
+                const noPanggil = String(item.nomor_panggil || "").toLowerCase();
+                return judul.includes(term) || kode.includes(term) || noPanggil.includes(term);
+            });
+            isSelectAll = false;
+            renderEkslemparList(filteredEkslempar);
+        });
         
-        // --- LOGIKA CETAK LABEL (Fleksibel) ---
         function generateLabels(e) {
             e.preventDefault();
-            
             const count = selectedEkslemparIds.size;
-            if (count === 0) {
-                showMessage('Pilih minimal satu Ekslempar untuk dicetak.', true);
-                return;
-            }
+            if (count === 0) return;
 
-            showMessage(`Mempersiapkan ${count} label untuk dicetak...`);
-            
-            // Ukuran dan Opsi Ditetapkan Secara Internal
-            const fixedWidth = '10cm'; // Lebar label tetap 10cm
+            const fixedWidth = '10cm';
             const baseFontSize = '16px'; 
-            const customHeaderName = document.getElementById('customHeaderName').value || 'Perputakaan Lubangsa';
+            const customHeaderName = document.getElementById('customHeaderName').value || 'Perpustakaan';
             const includeTitle = document.getElementById('includeTitle').checked;
             const includeKode = document.getElementById('includeKode').checked;
             
-            printArea.innerHTML = ''; // Kosongkan area cetak
-            
+            printArea.innerHTML = '';
             const selectedData = allEkslempar.filter(e => selectedEkslemparIds.has(e.id));
             
             selectedData.forEach(ekslempar => {
                 const label = document.createElement('div');
-                
-                // Konfigurasi Label Kontainer (Tinggi Auto)
                 label.className = 'label-box flex flex-col justify-start p-0 border border-black break-words text-center';
                 label.style.width = fixedWidth; 
-                label.style.height = 'auto'; // PENTING: Tinggi otomatis
-                label.style.fontSize = baseFontSize; // Font size dasar
-                label.style.lineHeight = '1.1'; 
-                label.style.boxSizing = 'border-box'; 
-                label.style.padding = '0'; 
+                label.style.height = 'auto';
+                label.style.fontSize = baseFontSize;
+                label.style.lineHeight = '1.1';
+                label.style.boxSizing = 'border-box';
 
-                // 1. Header Div (Nama Perpustakaan)
                 const header = document.createElement('div');
                 header.textContent = customHeaderName; 
-                header.style.backgroundColor = '#0d9488'; // Cyan-700
+                header.style.backgroundColor = '#0d9488';
                 header.style.color = 'white';
                 header.style.fontWeight = 'bold'; 
-                header.style.textAlign = 'center';
                 header.style.width = '100%';
-                header.style.fontSize = '120%'; // Lebih besar dari isi label
-                header.style.padding = '0 1px'; 
-                header.style.lineHeight = '1.0'; 
-
+                header.style.fontSize = '120%';
+                header.style.padding = '2px 0';
                 label.appendChild(header);
 
-                // 2. Content Div (Nomor Panggil, Judul, Kode Ekslempar)
-                const callNumberLines = (ekslempar.nomor_panggil || 'XXX').split(' ').map(line => `<span>${line}</span>`).join('<br>');
-                const titleText = ekslempar.judul || 'Judul Tidak Tersedia';
-                const kodeText = ekslempar.kode || 'KOSONG';
-                
+                const callNumberLines = String(ekslempar.nomor_panggil || 'XXX').split(' ').map(line => `<span>${line}</span>`).join('<br>');
                 let contentHtml = '';
 
-                // Judul (Opsional) - Tidak Bold
                 if (includeTitle) {
-                    contentHtml += `
-                        <div class="title-truncate" style="font-size: 80%; color: #4b5563; line-height: 1.0; margin-top: 0; padding: 1px 2px;">
-                            ${titleText}
-                        </div>
-                    `;
+                    contentHtml += `<div class="title-truncate" style="font-size: 80%; color: #4b5563; padding: 2px;">${ekslempar.judul || '-'}</div>`;
                 }
                 
-                // Nomor Panggil (Wajib) - Tidak Bold
-                contentHtml += `
-                    <div style="font-size: 100%; line-height: 1.1; padding: 2px;">
-                        ${callNumberLines}
-                    </div>
-                `;
+                contentHtml += `<div style="font-size: 100%; padding: 5px;">${callNumberLines}</div>`;
 
-                // Kode Ekslempar (Opsional) - Tidak Bold
                 if (includeKode) {
-                    contentHtml += `
-                        <div style="font-size: 70%; line-height: 1.0; padding: 1px 2px;">
-                            Kode: ${kodeText}
-                        </div>
-                    `;
+                    contentHtml += `<div style="font-size: 70%; padding: 2px;">Kode: ${ekslempar.kode || '-'}</div>`;
                 }
 
                 const contentDiv = document.createElement('div');
-                contentDiv.style.display = 'flex';
-                contentDiv.style.flexDirection = 'column';
-                contentDiv.style.justifyContent = 'flex-start'; 
-                contentDiv.style.alignItems = 'center';
-                contentDiv.style.width = '100%';
-
                 contentDiv.innerHTML = contentHtml;
-                
                 label.appendChild(contentDiv);
-                
                 printArea.appendChild(label);
             });
-            
             window.print();
         }
 
-        // --- INTI APLIKASI ---
         function initializeApp() {
             db.collection('ekslempar').orderBy('kode').onSnapshot(snapshot => {
                 allEkslempar = [];
                 snapshot.forEach(doc => {
                     allEkslempar.push({ id: doc.id, ...doc.data() }); 
                 });
-
-                showMessage(`✅ ${allEkslempar.length} Ekslempar termuat. Pilih data yang akan dicetak.`); 
-                renderEkslemparList(allEkslempar);
-
-            }, error => {
-                 console.error("Error mendengarkan Ekslempar:", error);
-                 showMessage(`❌ Gagal koneksi Ekslempar: ${error.message}`, true);
+                filteredEkslempar = [...allEkslempar];
+                renderEkslemparList(filteredEkslempar);
+                showMessage(`${allEkslempar.length} data siap.`);
             });
-
             labelForm.addEventListener('submit', generateLabels);
         }
 
