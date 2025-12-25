@@ -10,51 +10,20 @@
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-        /* CSS Khusus untuk Tampilan Cetak */
         @media print {
-            .no-print {
-                display: none !important;
-            }
-            body {
-                margin: 0;
-                padding: 0;
-            }
-            #printArea {
-                /* DIUBAH: Menggunakan Flexbox agar label bisa fleksibel 2, 3, atau lebih per baris */
-                display: flex !important; 
-                flex-wrap: wrap;
-                width: 100%;
-                gap: 5px; 
-            }
-            /* Pastikan SVG Barcode tercetak dengan baik */
-            .label-box svg {
-                max-width: 95%; 
-                height: auto;
-            }
-            /* Gaya untuk memotong teks judul jika terlalu panjang */
-            .title-truncate {
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                max-width: 100%; 
-                text-align: center;
-            }
+            .no-print { display: none !important; }
+            body { margin: 0; padding: 0; }
+            #printArea { display: flex !important; flex-wrap: wrap; width: 100%; gap: 5px; }
+            .label-box svg { max-width: 95%; height: auto; }
+            .title-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; text-align: center; }
         }
-        
-        /* Style untuk Scrollbar */
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background-color: #a1a1aa; /* zinc-400 */
-            border-radius: 4px;
-        }
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #a1a1aa; border-radius: 4px; }
     </style>
 </head>
 <body class="bg-gray-50 p-6">
 
     <div class="max-w-7xl mx-auto bg-white p-6 rounded-lg shadow-xl no-print">
-        
         <div class="flex justify-between items-center mb-6 border-b pb-3">
             <h1 class="text-3xl font-bold text-gray-800">Cetak Barcode Ekslempar</h1>
             <a href="daftarbuku.html" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg transition duration-150 shadow-md text-sm">
@@ -65,12 +34,10 @@
         <div class="mb-6 p-4 border border-cyan-200 rounded-lg bg-cyan-50">
             <h2 class="text-xl font-semibold mb-3 text-cyan-700">Pengaturan Barcode</h2>
             <form id="labelForm" class="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end">
-                
                 <div class="sm:col-span-2">
                     <label for="customHeaderName" class="block text-sm font-medium text-gray-700">Nama Perpustakaan (Header)</label>
                     <input type="text" id="customHeaderName" value="Perpustakaan Lubangsa" class="mt-1 block w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:ring-cyan-500 focus:border-cyan-500">
                 </div>
-
                 <div class="sm:col-span-2 flex items-center gap-4">
                     <div class="flex items-center">
                         <input id="includeTitle" type="checkbox" class="h-4 w-4 text-cyan-600 border-gray-300 rounded" checked>
@@ -81,32 +48,32 @@
                         <label for="includeKode" class="ml-2 block text-sm font-medium text-gray-700">Tampilkan Kode Ekslempar</label>
                     </div>
                 </div>
-
                 <div class="sm:col-span-4">
                     <button type="submit" class="bg-cyan-700 hover:bg-cyan-800 text-white font-bold py-2 px-4 rounded-lg transition duration-150 shadow-md w-full" id="printBtn" disabled>
                         Cetak <span id="selectedCountDisplay">(0)</span> Barcode
                     </button>
                 </div>
             </form>
-            <p id="message" class="mt-4 text-sm text-red-500"></p>
+            <p id="message" class="mt-4 text-sm"></p>
+        </div>
+
+        <div class="mb-4">
+            <input type="text" id="searchInput" placeholder="Cari Judul, Kode, atau No Panggil..." class="block w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-cyan-500 focus:border-cyan-500">
         </div>
         
         <div class="mb-4 flex justify-between items-center">
              <h2 class="text-xl font-semibold text-gray-700">Pilih Ekslempar (<span id="totalItems">0</span> Total)</h2>
-             <button onclick="toggleSelectAll()" id="selectAllBtn" class="text-sm text-cyan-700 hover:text-cyan-900 font-medium">Pilih Semua</button>
+             <button type="button" onclick="toggleSelectAll()" id="selectAllBtn" class="text-sm text-cyan-700 hover:text-cyan-900 font-medium">Pilih Semua</button>
         </div>
 
         <div id="ekslemparList" class="space-y-3 max-h-96 overflow-y-auto custom-scrollbar p-2 border rounded-lg">
             <p class="text-center text-gray-500">Memuat data Ekslempar...</p>
         </div>
-        
     </div>
 
-    <div id="printArea" class="hidden">
-        </div>
+    <div id="printArea" class="hidden"></div>
 
     <script>
-        // 1. KONFIGURASI FIREBASE ANDA
         const firebaseConfig = {
             apiKey: "AIzaSyBB-vrCvxeSapbedNqQIfZ9Bh5de-sUDAQ",
             authDomain: "databuku-6385c.firebaseapp.com",
@@ -116,74 +83,72 @@
             messagingSenderId: "844439345466",
             appId: "1:844439345466:web:fb90dfc8337a96f0621803"
         };
-        const app = firebase.initializeApp(firebaseConfig);
+        firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        const ekslemparListContainer = document.getElementById('ekslemparList');
+
+        let allEkslempar = []; 
+        let filteredEkslempar = [];
+        let selectedEkslemparIds = new Set();
+
+        const listContainer = document.getElementById('ekslemparList');
+        const searchInput = document.getElementById('searchInput');
         const selectedCountDisplay = document.getElementById('selectedCountDisplay');
         const totalItemsDisplay = document.getElementById('totalItems');
         const printBtn = document.getElementById('printBtn');
-        const printArea = document.getElementById('printArea');
-        const labelForm = document.getElementById('labelForm');
-        const message = document.getElementById('message');
         const selectAllBtn = document.getElementById('selectAllBtn');
-        let allEkslempar = []; 
-        let selectedEkslemparIds = new Set();
-        let isSelectAll = false;
 
         function showMessage(text, isError = false) {
+            const message = document.getElementById('message');
             message.textContent = text;
             message.className = `mt-4 text-sm font-medium ${isError ? 'text-red-600' : 'text-green-600'}`;
         }
-        
+
         function updateSelectedCount() {
             const count = selectedEkslemparIds.size;
             selectedCountDisplay.textContent = `(${count})`;
             printBtn.disabled = count === 0;
-            selectAllBtn.textContent = isSelectAll ? 'Batal Pilih Semua' : 'Pilih Semua';
+            const allVisibleSelected = filteredEkslempar.length > 0 && filteredEkslempar.every(item => selectedEkslemparIds.has(item.id));
+            selectAllBtn.textContent = allVisibleSelected ? 'Batal Pilih Semua' : 'Pilih Semua';
         }
 
         function toggleSelection(ekslemparId) {
             if (selectedEkslemparIds.has(ekslemparId)) {
                 selectedEkslemparIds.delete(ekslemparId);
-                document.getElementById(`checkbox-${ekslemparId}`).checked = false;
             } else {
                 selectedEkslemparIds.add(ekslemparId);
-                document.getElementById(`checkbox-${ekslemparId}`).checked = true;
             }
-            isSelectAll = selectedEkslemparIds.size === allEkslempar.length;
+            renderEkslemparList();
             updateSelectedCount();
         }
         
         function toggleSelectAll() {
-            if (isSelectAll) {
-                selectedEkslemparIds.clear();
+            const allVisibleSelected = filteredEkslempar.length > 0 && filteredEkslempar.every(item => selectedEkslemparIds.has(item.id));
+            if (allVisibleSelected) {
+                filteredEkslempar.forEach(item => selectedEkslemparIds.delete(item.id));
             } else {
-                allEkslempar.forEach(ekslempar => selectedEkslemparIds.add(ekslempar.id));
+                filteredEkslempar.forEach(item => selectedEkslemparIds.add(item.id));
             }
-            isSelectAll = !isSelectAll;
-            renderEkslemparList(allEkslempar); 
+            renderEkslemparList();
             updateSelectedCount();
         }
 
-        function renderEkslemparList(list) {
-            ekslemparListContainer.innerHTML = '';
-            totalItemsDisplay.textContent = list.length;
+        function renderEkslemparList() {
+            listContainer.innerHTML = '';
+            totalItemsDisplay.textContent = filteredEkslempar.length;
             
-            if (list.length === 0) {
-                ekslemparListContainer.innerHTML = '<p class="text-center text-gray-500">Tidak ada data Ekslempar yang ditemukan.</p>';
+            if (filteredEkslempar.length === 0) {
+                listContainer.innerHTML = '<p class="text-center text-gray-500">Tidak ada data ditemukan.</p>';
                 return;
             }
 
-            list.forEach(ekslempar => {
+            filteredEkslempar.forEach(ekslempar => {
                 const isSelected = selectedEkslemparIds.has(ekslempar.id);
                 const itemDiv = document.createElement('div');
-                
                 itemDiv.className = `flex items-center p-3 rounded-lg border cursor-pointer transition-all duration-150 ${isSelected ? 'bg-cyan-100 border-cyan-400 shadow' : 'bg-white border-gray-200 hover:bg-gray-50'}`;
-                itemDiv.setAttribute('data-id', ekslempar.id);
                 itemDiv.onclick = () => toggleSelection(ekslempar.id);
 
                 itemDiv.innerHTML = `
-                    <input type="checkbox" id="checkbox-${ekslempar.id}" ${isSelected ? 'checked' : ''} class="w-5 h-5 text-cyan-600 bg-gray-100 border-gray-300 rounded focus:ring-cyan-500" onclick="event.stopPropagation(); toggleSelection('${ekslempar.id}')">
+                    <input type="checkbox" ${isSelected ? 'checked' : ''} class="w-5 h-5 text-cyan-600 rounded" onclick="event.stopPropagation(); toggleSelection('${ekslempar.id}')">
                     <div class="ml-4 flex-grow">
                         <p class="text-sm font-semibold text-gray-800">${ekslempar.nomor_panggil || 'NO PANGGIL KOSONG'}</p>
                         <p class="text-xs text-gray-600">Kode Ekslempar: ${ekslempar.kode || '-'}</p>
@@ -191,144 +156,104 @@
                     </div>
                     <div class="text-sm text-cyan-700">${ekslempar.lokasi_rak || 'Rak Kosong'}</div>
                 `;
-                ekslemparListContainer.appendChild(itemDiv);
+                listContainer.appendChild(itemDiv);
             });
-            updateSelectedCount();
         }
 
-        // --- LOGIKA CETAK BARCODE (Fleksibel) ---
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            filteredEkslempar = allEkslempar.filter(item => {
+                const judul = String(item.judul || "").toLowerCase();
+                const kode = String(item.kode || "").toLowerCase();
+                const panggil = String(item.nomor_panggil || "").toLowerCase();
+                return judul.includes(query) || kode.includes(query) || panggil.includes(query);
+            });
+            renderEkslemparList();
+            updateSelectedCount();
+        });
+
         function generateLabels(e) {
             e.preventDefault();
+            const printArea = document.getElementById('printArea');
+            printArea.innerHTML = ''; 
             
-            const count = selectedEkslemparIds.size;
-            if (count === 0) {
-                showMessage('Pilih minimal satu Ekslempar untuk dicetak.', true);
-                return;
-            }
-            
-            showMessage(`Mempersiapkan ${count} barcode untuk dicetak...`);
-            
-            // Pengaturan Default Internal
-            const fixedWidth = '8cm'; 
-            const baseFontSize = '16px'; 
             const customHeaderName = document.getElementById('customHeaderName').value || 'Perpustakaan Lubangsa';
             const includeTitle = document.getElementById('includeTitle').checked;
             const includeKode = document.getElementById('includeKode').checked;
-            
-            printArea.innerHTML = ''; 
             
             const selectedData = allEkslempar.filter(e => selectedEkslemparIds.has(e.id));
             
             selectedData.forEach(ekslempar => {
                 const label = document.createElement('div');
-                
-                // Konfigurasi Label Kontainer (Tinggi Auto)
                 label.className = 'label-box flex flex-col justify-start p-0 border border-black break-words text-center';
-                label.style.width = fixedWidth; 
-                label.style.height = 'auto'; // PENTING: Tinggi otomatis
-                label.style.fontSize = baseFontSize;
+                label.style.width = '8cm'; 
+                label.style.height = 'auto';
+                label.style.fontSize = '16px';
                 label.style.lineHeight = '1.1'; 
                 label.style.boxSizing = 'border-box'; 
                 label.style.padding = '0'; 
 
-                // 1. Header Div (Nama Perpustakaan)
                 const header = document.createElement('div');
                 header.textContent = customHeaderName; 
                 header.style.backgroundColor = '#0d9488'; 
                 header.style.color = 'white';
-                header.style.fontWeight = 'bold'; // BOLD
-                header.style.textAlign = 'center';
+                header.style.fontWeight = 'bold';
                 header.style.width = '100%';
-                header.style.fontSize = '120%'; // Lebih besar dari isi
+                header.style.fontSize = '120%';
                 header.style.padding = '0 1px'; 
                 header.style.lineHeight = '1.0'; 
-
                 label.appendChild(header);
 
-                // 2. Content Div (Judul, Barcode, dan Kode Text)
                 const barcodeId = `barcode-${ekslempar.id}`;
-                const titleText = ekslempar.judul || 'Judul Tidak Tersedia';
-                const kodeText = ekslempar.kode || 'KOSONG';
-                
-                let contentHtml = '';
-
-                // Judul (Opsional - Tidak Bold)
-                if (includeTitle) {
-                    contentHtml += `
-                        <div class="title-truncate" style="font-size: 50%; color: #4b5563; line-height: 1.0; margin-top: 0;">
-                            ${titleText}
-                        </div>
-                    `;
-                }
-                
-                // Barcode SVG
-                contentHtml += `
-                    <svg id="${barcodeId}" style="margin-top: 0; margin-bottom: 0;"></svg>
-                `;
-
-                // Kode Ekslempar (Opsional - Tidak Bold)
-                if (includeKode) {
-                     contentHtml += `
-                        <div style="font-size: 80%; line-height: 1.0; margin-bottom: 0;">
-                            ${kodeText}
-                        </div>
-                    `;
-                }
-
                 const contentDiv = document.createElement('div');
                 contentDiv.style.display = 'flex';
                 contentDiv.style.flexDirection = 'column';
-                contentDiv.style.justifyContent = 'flex-start'; 
                 contentDiv.style.alignItems = 'center';
                 contentDiv.style.padding = '0 2px 1px 2px'; 
-                contentDiv.style.width = '100%';
+                
+                let contentHtml = '';
+                if (includeTitle) {
+                    contentHtml += `<div class="title-truncate" style="font-size: 50%; color: #4b5563; line-height: 1.0; margin-top: 0;">${ekslempar.judul || ''}</div>`;
+                }
+                contentHtml += `<svg id="${barcodeId}" style="margin-top: 0; margin-bottom: 0;"></svg>`;
+                if (includeKode) {
+                     contentHtml += `<div style="font-size: 80%; line-height: 1.0; margin-bottom: 0;">${ekslempar.kode || ''}</div>`;
+                }
 
                 contentDiv.innerHTML = contentHtml;
-                
                 label.appendChild(contentDiv);
-                
                 printArea.appendChild(label);
                 
-                // Panggil JsBarcode untuk merender gambar SVG barcode
-                const barcodeValue = ekslempar.kode || '00000';
-                if (barcodeValue) {
-                    try {
-                        JsBarcode(`#${barcodeId}`, barcodeValue, {
-                            format: "CODE128", 
-                            displayValue: false, 
-                            width: 2, 
-                            height: 50, // Diatur sedikit lebih pendek agar aman
-                            margin: 0, 
-                        });
-                    } catch (error) {
-                        console.warn(`Gagal membuat barcode untuk ID ${ekslempar.id}: ${error.message}`);
-                    }
-                }
+                JsBarcode(`#${barcodeId}`, String(ekslempar.kode || '00000'), {
+                    format: "CODE128", 
+                    displayValue: false, 
+                    width: 2, 
+                    height: 50, 
+                    margin: 0, 
+                });
             });
-            
             window.print();
         }
 
-        // --- INTI APLIKASI ---
-        function initializeApp() {
-            db.collection('ekslempar').orderBy('kode').onSnapshot(snapshot => {
-                allEkslempar = [];
-                snapshot.forEach(doc => {
-                    allEkslempar.push({ id: doc.id, ...doc.data() }); 
-                });
+        db.collection('ekslempar').orderBy('kode').onSnapshot(snapshot => {
+            allEkslempar = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const query = searchInput.value.toLowerCase();
+            if(query) {
+                filteredEkslempar = allEkslempar.filter(item => 
+                    String(item.judul || "").toLowerCase().includes(query) || 
+                    String(item.kode || "").toLowerCase().includes(query)
+                );
+            } else {
+                filteredEkslempar = [...allEkslempar];
+            }
+            renderEkslemparList();
+            updateSelectedCount();
+            showMessage(`✅ ${allEkslempar.length} data dimuat.`);
+        }, error => {
+            showMessage(`❌ Error: ${error.message}`, true);
+        });
 
-                showMessage(`✅ ${allEkslempar.length} Ekslempar termuat. Pilih data yang akan dicetak.`); 
-                renderEkslemparList(allEkslempar);
-
-            }, error => {
-                 console.error("Error mendengarkan Ekslempar:", error);
-                 showMessage(`❌ Gagal koneksi Ekslempar: ${error.message}`, true);
-            });
-
-            labelForm.addEventListener('submit', generateLabels);
-        }
-
-        window.onload = initializeApp;
+        document.getElementById('labelForm').addEventListener('submit', generateLabels);
     </script>
 </body>
 </html>
